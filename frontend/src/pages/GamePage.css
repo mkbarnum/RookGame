@@ -1,0 +1,664 @@
+/* ===== Mobile-First Game Layout ===== */
+
+.game-container {
+  height: 100vh;
+  height: 100dvh;
+  display: flex;
+  flex-direction: column;
+  background: linear-gradient(135deg, #1a2f23 0%, #0d1a12 50%, #0a1410 100%);
+  color: #e8e8e8;
+  overflow: hidden;
+  font-family: -apple-system, BlinkMacSystemFont, 'Segoe UI', Roboto, sans-serif;
+}
+
+/* ===== Header ===== */
+.game-header {
+  display: flex;
+  align-items: center;
+  gap: 0.75rem;
+  padding: 0.5rem 0.75rem;
+  background: rgba(0, 0, 0, 0.4);
+  border-bottom: 1px solid rgba(255, 255, 255, 0.08);
+  flex-shrink: 0;
+}
+
+.back-btn {
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  width: 36px;
+  height: 36px;
+  border-radius: 8px;
+  background: rgba(255, 255, 255, 0.08);
+  color: #a0a0a0;
+  text-decoration: none;
+  font-size: 1.25rem;
+  transition: all 0.2s;
+  -webkit-tap-highlight-color: transparent;
+}
+
+.back-btn:active {
+  background: rgba(255, 255, 255, 0.15);
+  transform: scale(0.95);
+}
+
+.game-status {
+  flex: 1;
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  gap: 0.5rem;
+}
+
+.game-code {
+  font-family: 'SF Mono', 'Fira Code', monospace;
+  font-size: 0.9rem;
+  font-weight: 600;
+  color: #4ecdc4;
+  letter-spacing: 0.05em;
+}
+
+.game-stats {
+  display: flex;
+  gap: 0.75rem;
+}
+
+.stat {
+  font-size: 0.75rem;
+  color: #808080;
+}
+
+.stat strong {
+  color: #c0c0c0;
+}
+
+/* ===== Game Table ===== */
+.game-table {
+  flex: 1;
+  display: flex;
+  flex-direction: column;
+  min-height: 0;
+  padding: 0.5rem;
+  gap: 0.5rem;
+}
+
+.table-section {
+  display: flex;
+  align-items: center;
+  justify-content: center;
+}
+
+/* Top player section */
+.table-top {
+  flex-shrink: 0;
+}
+
+/* Middle section with side players and play area */
+.table-middle {
+  flex: 1;
+  min-height: 0;
+  gap: 0.25rem;
+}
+
+/* Bottom player section */
+.table-bottom {
+  flex-shrink: 0;
+}
+
+/* ===== Player Info Cards ===== */
+.player-info {
+  display: flex;
+  align-items: center;
+  gap: 0.5rem;
+  padding: 0.4rem 0.6rem;
+  background: rgba(255, 255, 255, 0.05);
+  border-radius: 12px;
+  border: 1px solid rgba(255, 255, 255, 0.08);
+  transition: all 0.3s ease;
+}
+
+.player-info.partner {
+  background: rgba(78, 205, 196, 0.1);
+  border-color: rgba(78, 205, 196, 0.25);
+}
+
+.player-info.current-turn {
+  background: rgba(255, 200, 87, 0.15);
+  border-color: rgba(255, 200, 87, 0.4);
+  box-shadow: 0 0 12px rgba(255, 200, 87, 0.2);
+}
+
+.player-avatar {
+  width: 28px;
+  height: 28px;
+  border-radius: 50%;
+  background: linear-gradient(135deg, #667eea, #764ba2);
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  font-size: 0.7rem;
+  font-weight: 700;
+  color: white;
+  flex-shrink: 0;
+}
+
+.player-details {
+  display: flex;
+  flex-direction: column;
+  gap: 0.1rem;
+  min-width: 0;
+}
+
+.player-name {
+  font-size: 0.8rem;
+  font-weight: 600;
+  color: #e0e0e0;
+  white-space: nowrap;
+  overflow: hidden;
+  text-overflow: ellipsis;
+}
+
+.partner-badge {
+  font-size: 0.6rem;
+  color: #4ecdc4;
+  text-transform: uppercase;
+  letter-spacing: 0.05em;
+}
+
+.player-card-count {
+  display: flex;
+  align-items: center;
+  gap: 0.25rem;
+  margin-left: auto;
+}
+
+.player-card-count .card {
+  width: 20px;
+  height: 28px;
+}
+
+.player-card-count .count {
+  font-size: 0.85rem;
+  font-weight: 700;
+  color: #a0a0a0;
+  min-width: 1.5ch;
+}
+
+/* Side player positioning */
+.player-left {
+  flex-direction: row;
+}
+
+.player-right {
+  flex-direction: row-reverse;
+}
+
+.player-right .player-card-count {
+  margin-left: 0;
+  margin-right: auto;
+  flex-direction: row-reverse;
+}
+
+/* ===== Center Area ===== */
+.center-area {
+  flex: 1;
+  display: flex;
+  flex-direction: column;
+  align-items: center;
+  justify-content: center;
+  gap: 0.75rem;
+  min-width: 0;
+  padding: 0 0.25rem;
+}
+
+/* ===== Trick Area ===== */
+.trick-area {
+  position: relative;
+  width: min(180px, 50vw);
+  height: min(180px, 50vw);
+  max-width: 200px;
+  max-height: 200px;
+  border-radius: 50%;
+  background: 
+    radial-gradient(circle at center, rgba(78, 205, 196, 0.08) 0%, transparent 70%),
+    rgba(0, 0, 0, 0.3);
+  border: 2px solid rgba(78, 205, 196, 0.15);
+}
+
+.trick-center {
+  position: absolute;
+  top: 50%;
+  left: 50%;
+  transform: translate(-50%, -50%);
+  text-align: center;
+}
+
+.trick-label {
+  font-size: 0.65rem;
+  color: rgba(255, 255, 255, 0.3);
+  text-transform: uppercase;
+  letter-spacing: 0.1em;
+}
+
+.trick-slot {
+  position: absolute;
+  width: 32px;
+  height: 44px;
+  border-radius: 4px;
+  border: 1px dashed rgba(255, 255, 255, 0.15);
+  background: rgba(255, 255, 255, 0.02);
+}
+
+.slot-top {
+  top: 12%;
+  left: 50%;
+  transform: translateX(-50%);
+}
+
+.slot-bottom {
+  bottom: 12%;
+  left: 50%;
+  transform: translateX(-50%);
+}
+
+.slot-left {
+  left: 12%;
+  top: 50%;
+  transform: translateY(-50%);
+}
+
+.slot-right {
+  right: 12%;
+  top: 50%;
+  transform: translateY(-50%);
+}
+
+/* ===== Kitty Display ===== */
+.kitty-display {
+  display: flex;
+  align-items: center;
+  gap: 0.5rem;
+  padding: 0.3rem 0.6rem;
+  background: rgba(0, 0, 0, 0.3);
+  border-radius: 8px;
+  border: 1px solid rgba(255, 255, 255, 0.08);
+}
+
+.kitty-stack {
+  position: relative;
+  width: 24px;
+  height: 32px;
+}
+
+.kitty-card {
+  position: absolute;
+  top: 0;
+  left: 0;
+}
+
+.kitty-card .card {
+  width: 24px;
+  height: 32px;
+}
+
+.kitty-label {
+  font-size: 0.7rem;
+  color: #707070;
+}
+
+/* ===== Local Player Area ===== */
+.local-player {
+  width: 100%;
+  background: linear-gradient(0deg, rgba(212, 165, 116, 0.08) 0%, transparent 100%);
+  border-top: 1px solid rgba(212, 165, 116, 0.2);
+  padding-top: 0.5rem;
+}
+
+.local-player-header {
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  gap: 0.5rem;
+  padding: 0 0.5rem;
+  margin-bottom: 0.5rem;
+}
+
+.local-avatar {
+  width: 32px;
+  height: 32px;
+  border-radius: 50%;
+  background: linear-gradient(135deg, #d4a574, #c49464);
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  font-size: 0.65rem;
+  font-weight: 700;
+  color: #1a1a1a;
+}
+
+.local-name {
+  font-size: 0.9rem;
+  font-weight: 600;
+  color: #d4a574;
+}
+
+.card-count-badge {
+  font-size: 0.7rem;
+  color: #808080;
+  padding: 0.15rem 0.4rem;
+  background: rgba(0, 0, 0, 0.3);
+  border-radius: 4px;
+}
+
+/* ===== Hand Container ===== */
+.hand-container {
+  width: 100%;
+  overflow: hidden;
+  padding-bottom: env(safe-area-inset-bottom, 0.5rem);
+}
+
+.hand-scroll {
+  display: flex;
+  gap: 0.35rem;
+  padding: 0.25rem 0.5rem;
+  overflow-x: auto;
+  -webkit-overflow-scrolling: touch;
+  scrollbar-width: none;
+  scroll-snap-type: x proximity;
+}
+
+.hand-scroll::-webkit-scrollbar {
+  display: none;
+}
+
+/* ===== Card Styling ===== */
+.card {
+  width: 52px;
+  height: 72px;
+  border-radius: 8px;
+  background: #fefefe;
+  border: none;
+  padding: 0;
+  display: flex;
+  flex-direction: column;
+  align-items: center;
+  justify-content: space-between;
+  font-family: 'Georgia', serif;
+  box-shadow: 
+    0 2px 8px rgba(0, 0, 0, 0.4),
+    inset 0 1px 0 rgba(255, 255, 255, 0.5);
+  cursor: pointer;
+  transition: transform 0.15s ease, box-shadow 0.15s ease;
+  flex-shrink: 0;
+  scroll-snap-align: center;
+  -webkit-tap-highlight-color: transparent;
+  touch-action: manipulation;
+}
+
+.card:active {
+  transform: translateY(-6px) scale(1.02);
+  box-shadow: 
+    0 8px 20px rgba(0, 0, 0, 0.5),
+    inset 0 1px 0 rgba(255, 255, 255, 0.5);
+}
+
+.card-top,
+.card-bottom {
+  font-size: 0.9rem;
+  font-weight: 700;
+  padding: 0.2rem;
+}
+
+.card-bottom {
+  transform: rotate(180deg);
+}
+
+.card-symbol {
+  font-size: 1.1rem;
+  font-weight: 700;
+}
+
+/* Card Colors */
+.card.green {
+  background: linear-gradient(145deg, #e8f5e9 0%, #c8e6c9 100%);
+  border: 2.5px solid #2e7d32;
+  color: #1b5e20;
+}
+
+.card.red {
+  background: linear-gradient(145deg, #ffebee 0%, #ffcdd2 100%);
+  border: 2.5px solid #c62828;
+  color: #b71c1c;
+}
+
+.card.yellow {
+  background: linear-gradient(145deg, #fffde7 0%, #fff59d 100%);
+  border: 2.5px solid #f9a825;
+  color: #e65100;
+}
+
+.card.black {
+  background: linear-gradient(145deg, #fafafa 0%, #e0e0e0 100%);
+  border: 2.5px solid #212121;
+  color: #0d0d0d;
+}
+
+/* Rook Card */
+.card.rook {
+  background: linear-gradient(145deg, #1a1a2e 0%, #0f0f1a 100%);
+  border: 2.5px solid #d4a574;
+  color: #d4a574;
+  box-shadow: 
+    0 2px 8px rgba(0, 0, 0, 0.4),
+    0 0 15px rgba(212, 165, 116, 0.2);
+}
+
+.card.rook .card-symbol {
+  font-size: 0.7rem;
+  letter-spacing: 0.05em;
+}
+
+/* Card Back */
+.card-back {
+  background: linear-gradient(145deg, #1e3a5f 0%, #0d1f33 100%);
+  border: 2px solid #2a4a6f;
+  cursor: default;
+}
+
+.card-back:active {
+  transform: none;
+  box-shadow: 
+    0 2px 8px rgba(0, 0, 0, 0.4),
+    inset 0 1px 0 rgba(255, 255, 255, 0.1);
+}
+
+.back-pattern {
+  font-size: 1.2rem;
+  color: rgba(78, 205, 196, 0.25);
+}
+
+/* ===== Responsive: Larger Phones ===== */
+@media (min-width: 390px) {
+  .card {
+    width: 56px;
+    height: 78px;
+  }
+
+  .card-top,
+  .card-bottom {
+    font-size: 1rem;
+  }
+
+  .card-symbol {
+    font-size: 1.3rem;
+  }
+
+  .hand-scroll {
+    gap: 0.4rem;
+  }
+
+  .trick-area {
+    width: min(200px, 55vw);
+    height: min(200px, 55vw);
+  }
+}
+
+/* ===== Responsive: Tablets ===== */
+@media (min-width: 768px) {
+  .game-header {
+    padding: 0.75rem 1.25rem;
+  }
+
+  .game-table {
+    padding: 1rem;
+    gap: 1rem;
+  }
+
+  .card {
+    width: 70px;
+    height: 98px;
+  }
+
+  .card-top,
+  .card-bottom {
+    font-size: 1.2rem;
+  }
+
+  .card-symbol {
+    font-size: 1.6rem;
+  }
+
+  .hand-scroll {
+    gap: 0.5rem;
+    justify-content: center;
+  }
+
+  .trick-area {
+    width: 240px;
+    height: 240px;
+    max-width: none;
+    max-height: none;
+  }
+
+  .trick-slot {
+    width: 50px;
+    height: 70px;
+  }
+
+  .player-info {
+    padding: 0.6rem 1rem;
+  }
+
+  .player-avatar {
+    width: 36px;
+    height: 36px;
+    font-size: 0.85rem;
+  }
+
+  .player-name {
+    font-size: 0.95rem;
+  }
+
+  .player-card-count .card {
+    width: 28px;
+    height: 38px;
+  }
+
+  .local-avatar {
+    width: 40px;
+    height: 40px;
+  }
+
+  .local-name {
+    font-size: 1rem;
+  }
+}
+
+/* ===== Responsive: Desktop ===== */
+@media (min-width: 1024px) {
+  .game-table {
+    padding: 1.5rem;
+  }
+
+  .card {
+    width: 80px;
+    height: 112px;
+  }
+
+  .card-top,
+  .card-bottom {
+    font-size: 1.4rem;
+    padding: 0.3rem;
+  }
+
+  .card-symbol {
+    font-size: 1.8rem;
+  }
+
+  .card:hover {
+    transform: translateY(-8px);
+    box-shadow: 
+      0 12px 25px rgba(0, 0, 0, 0.5),
+      inset 0 1px 0 rgba(255, 255, 255, 0.5);
+  }
+
+  .trick-area {
+    width: 300px;
+    height: 300px;
+  }
+
+  .trick-slot {
+    width: 60px;
+    height: 84px;
+  }
+
+  .hand-scroll {
+    gap: 0.6rem;
+  }
+}
+
+/* ===== Landscape Mode ===== */
+@media (max-height: 500px) and (orientation: landscape) {
+  .game-container {
+    overflow: auto;
+  }
+
+  .game-table {
+    flex-direction: row;
+    flex-wrap: wrap;
+    justify-content: center;
+    align-items: stretch;
+    min-height: auto;
+  }
+
+  .table-top,
+  .table-bottom {
+    flex-basis: 100%;
+  }
+
+  .table-middle {
+    flex: 1;
+  }
+
+  .card {
+    width: 44px;
+    height: 62px;
+  }
+
+  .trick-area {
+    width: 120px;
+    height: 120px;
+  }
+
+  .trick-slot {
+    width: 28px;
+    height: 40px;
+  }
+}
+
+/* ===== Safe Area Support ===== */
+@supports (padding: env(safe-area-inset-bottom)) {
+  .local-player {
+    padding-bottom: env(safe-area-inset-bottom);
+  }
+}

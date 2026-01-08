@@ -1,0 +1,61 @@
+ 
+
+Rook Game Rules Clarification and Implementation Notes
+This document reviews the key rules and decisions from the conversation about implementing the Rook card game. It covers the agreed-upon game rules (with citations from known sources for verification) as well as some technical implementation details for the project. All rules below assume a standard four-player partnership game (two teams of two) unless otherwise noted.
+
+Card Deck and Rank Order
+
+Rook uses a special deck with cards numbered 1 through 14 in four colors (usually black, red, green, yellow) plus one Rook bird card. In this variant, 1 is treated as the highest rank, above 14. Cards are typically sorted such that 14 is followed by 1 to reflect 1's high rank in players' hands.
+
+• The 1 card is high (Option A was chosen for rank order), meaning it outranks the 14 in each suit. This is a common Rook variant in many regions	. (By contrast, some official rules remove the 1s entirely or treat 14 as highest, but here we keep 1s in play as the top cards.)
+• The Rook bird card is a special card that belongs to the trump suit. In this game, the Rook is the lowest trump in rank	. This means every normal trump card (numbers in the trump color) will outrank the Rook. For example, if Green is trump, the lowest green card (e.g. 5) beats the Rook in a trick since the Rook is considered just below the 5.
+• Because the Rook is considered part of the trump suit in this variant, it must follow suit whenever a trump is led (the Rook effectively "becomes" the trump color)		. Unlike some official rules where the Rook can be played at any time as the highest trump	, here the Rook obeys normal follow-suit
+
+rules and is not a wildcard escape. In other words, if a trump color is led and you have the Rook (and no other trump), you are obliged to play it. If a non-trump suit is led and you have cards of that suit, you cannot slough the Rook - you must follow the led suit if possible.
+
+Bidding Rules
+
+• Minimum Bid: The bidding starts at 50 points minimum (or the player may choose to fold/pass if they don't want to bid 50)  . This is lower than the official tournament rule of 70  , reflecting a more casual or variant game start.
+• Bid Increments: Bids must increase in increments of 5 points	. For example, if one player bids 50,
+the next bid could be 55, 60, 65, and so on.
+• Turn Order for Bidding: The host (player 0) begins the bidding in this implementation, and then it proceeds clockwise (player 1, 2, 3, etc.). This is a slight adjustment for the online setting. (Traditionally, the player to the left of the dealer would start the bidding	, but since the "host" is presumably the dealer in the first hand, it effectively works out the same.)
+• Passing and "Sold" Bid: If a player does not wish to top the current high bid, they must pass. Once a player passes, they may not bid again in that round	. The auction continues until all but one player have passed, at which point the highest bid is finalized (essentially "sold" to that high bidder). No one can re-enter the bidding after this point.
+• Winning the Bid (Kitty/Nest): The high bidder wins the "kitty" (also called the nest) - the set of undealt cards on the table. The bidder will pick up those kitty cards and then discard an equal number of cards from their hand to form a new kitty. (Those discarded cards are out of play.) After discarding, the high bidder declares the trump color for this hand	.
+Trick Play and Trump Rules
+
+• Leading the First Trick: The player to the left of the dealer leads the first trick of the hand	. (In our numbering, if player 0 is dealer, then player 1 would lead the first card.) After that, the winner of each trick leads the next one	. This rotation continues until all cards are played.
+• Playing to a Trick: On your turn, you must follow the suit that was led if you have a card of that
+color	. If you do not have any card of the suit that was led, you may play any card - you can throw off a non-scoring card, or play a trump card (including the Rook). There is no restriction on leading trump; trump may be led at any time if the leader chooses.
+• Trump Cards: One suit (color) is designated as trump by the high bidder. Any card of the trump color
+outranks all cards of other colors	. If a trump is played on a trick where a different suit was led, the trump will win the trick (unless a higher trump is also played).
+• Trick Winning: The trick is taken by the highest card of the suit that was led, unless one or more trumps were played - in that case the highest trump wins the trick	. (In this variant, remember the Rook is a trump card but ranks as the lowest trump, so it will only win a trick if it is the only trump played or if only the Rook and lower-ranking dummy cards are played.) The player who wins a trick collects all the cards of that trick and then leads a card to start the next trick	.
+
+Rook Card Behavior (Variant vs. Official)
+
+• As noted, this game uses Option A for the Rook: the Rook is treated as the lowest trump and must follow suit as a trump card. This aligns with the "Kentucky Rook" style rules where the Rook is not a supreme trump but rather a low trump that obeys normal trick-taking rules	. If a trump is led
+
+and the only trump you hold is the Rook, you must play the Rook at that time (it effectively takes on the trump suit's color)	. If a non-trump suit is led and you have that suit, you cannot play the Rook (since you must follow the led suit).
+• By contrast, the official rule in Parker Brothers/Hasbro Rook makes the Rook card the highest trump that can beat any card and even allows it to be played even when you could follow suit	. We are not using that official rule. Instead, the Rook here is a potential losing card - any numerical trump will beat it. This makes the gameplay more challenging and strategic, as players cannot simply rely on the Rook to bail them out of a trick. (This variant rule was confirmed in our discussion as the preferred option.)
+
+Scoring and Kitty Points
+
+• Counter Cards: Only certain cards are worth points (often called "counters"). In this game, the standard point values are used: each 5 is worth 5 points, each 10 is 10 points, each 14 is 10 points, and the Rook card is 20 points	. All other cards (including 1s, and the 2-13 that are not listed above) carry no inherent point value; they are only useful for winning tricks. (Note: In this variant, 1s are high rank but are worth 0 points - some house rules give 1s a 15-point value, but that was not adopted here.) The total pool of points available in each hand is 120 points (assuming no special bonuses)	.
+• Taking Points in Tricks: Teams keep the points from any counters they capture in tricks. At hand's end, each team will sum the points from their captured cards. The bid-winning team must meet or exceed their bid with the points they captured, or else they "go set" (see below). The opposing team simply scores whatever points they caught.
+• Kitty/Nest Points: Any point cards that were in the kitty (nest) automatically belong to the bid- winning team once the bid is taken. Those points from the kitty are effectively a bonus for the bidders in this implementation. (Normally, in many Rook rules the kitty's cards remain hidden until the end and the points in the kitty go to whoever wins the last trick	. However, our agreed house rule is that the bidder gets those points upfront when they claim the kitty.) This means any counters in the discarded kitty are counted for the bidding team's score regardless of who wins the last trick. The discarded cards themselves are out of play and do not take part in any trick.
+• Making the Bid / Set: If the team that won the bid fails to capture at least as many points as their bid, they do not score those points at all and instead lose points equal to the bid (i.e. a penalty)
+    . This is the standard rule to discourage over-bidding. For example, if a team bid 80 but only collected 70 points, they would subtract 80 from their cumulative score for that round (and the other team would still score whatever points they earned). If the bid-winning team succeeds in meeting or exceeding their bid, they score all points earned.
+• "Win-All" Bonus (Shooting the Moon): If the bidding team manages to win every trick in the hand (i.e. the opponents score 0 points), a special bonus applies. In this case, the bidding team is awarded a full 200 points for that hand, regardless of the actual point cards	. This rule was specified in our conversation to reward a complete shut-out. Essentially, a "sweep" of all tricks gives the bidders an automatic 200-point score (which, as we'll see, is enough to win the entire game in one hand). This is a house rule similar to variants where taking all points yields a bonus up to 200	or even a 100- point bonus on top of 200	. In practice, it ensures that a rare total victory in a hand immediately pays off.
+• Winning the Game: The game is played until one team reaches or exceeds 200 points total (cumulative over hands) to win	. This was the target score decided upon (often called a "200-point game"). If both teams happen to exceed 200 in the same round, the team with the higher score wins
+
+the game	. In the unlikely event of a tie at the end of a hand, play would continue with another hand to break the tie (though ties are rare). Essentially, the highest score wins once the target is crossed.
+
+Technical Implementation Decisions
+In addition to the rules, several implementation details were clarified:
+
+1. User Accounts/Authentication: No complex authentication system is used. Players will not be required to formally log in; instead, the game will use a simple name entry to identify players (skipping full auth). This streamlines joining a game.
+2. Deployment Region: The backend server (and any cloud services) will be hosted in US East 1, which is the AWS N. Virginia region. This was chosen likely for low latency and convenience.
+3. Development Interface (Kiro CLI): Both the backend and frontend development utilize Kiro CLI prompts. This suggests the project is using the Kiro CLI tool for setup or interactive prompts on both ends, possibly to scaffold the project or manage deployment. (Kiro CLI is an AWS-related command- line knowledge tool, used here to maintain consistency between front-end and back-end configurations.)
+4. Session Persistence: The system will ensure that if a player refreshes their browser, they remain the same player in the same game state. In practice, this means a player's identity and game session are preserved (via cookies, session IDs, or a similar mechanism) so that a page refresh does not drop them from the game or change their seat. The state of the game and the player's role will be restored, preventing duplicate entries or loss of data on refresh.
+5. Additional Notes: The conversation indicated no other major changes beyond the above. The rules chosen align with a well-known Rook variant (1 high, 2-4 removed perhaps, Rook low trump, 200- point game). All players must adhere to these rules for a fair game experience. The partnership seating was defined such that player 0's partner is player 2, and player 1's partner is player 3 (i.e. opposite seating for teams). The host who creates the game will be player 0 by default.
+Sources: The rules and clarifications above are supported by Rook game references and community discussions. For example, the scoring and bidding mechanisms are outlined in the official	Hasbro Rook rules	and the Wikipedia entry on Rook	. The variant where 1 is high and Rook is lowest trump is documented in Rook player communities (sometimes called "Kentucky Discard" or regional house rules)
+       . The special 200-point win condition for sweeping all tricks is a known house rule as well	

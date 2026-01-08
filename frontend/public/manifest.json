@@ -1,0 +1,30 @@
+{
+  "short_name": "Rook Online",
+  "name": "Rook Online - Multiplayer Card Game",
+  "description": "Play Rook card game with friends anywhere! A progressive web app for multiplayer Rook gaming.",
+  "icons": [
+    {
+      "src": "favicon.ico",
+      "sizes": "64x64 32x32 24x24 16x16",
+      "type": "image/x-icon"
+    },
+    {
+      "src": "logo192.png",
+      "type": "image/png",
+      "sizes": "192x192",
+      "purpose": "any maskable"
+    },
+    {
+      "src": "logo512.png",
+      "type": "image/png",
+      "sizes": "512x512",
+      "purpose": "any maskable"
+    }
+  ],
+  "start_url": ".",
+  "display": "standalone",
+  "orientation": "portrait-primary",
+  "theme_color": "#1a1f35",
+  "background_color": "#0d1117",
+  "categories": ["games", "entertainment"]
+}
