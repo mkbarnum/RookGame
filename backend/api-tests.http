@@ -69,3 +69,71 @@ Content-Type: application/json
   "gameId": "{{createGame.response.body.gameId}}",
   "playerName": "David"
 }
+
+### ============================================
+### Choose Partner (Host Action)
+### ============================================
+### After all 4 players join, the host chooses a partner
+
+# @name choosePartner
+POST {{baseUrl}}/choosePartner
+Content-Type: application/json
+
+{
+  "gameId": "{{createGame.response.body.gameId}}",
+  "hostName": "Alice",
+  "partnerName": "Charlie"
+}
+
+### ============================================
+### Game Action - Play Card
+### ============================================
+### Test the new gameAction endpoint with playCard action
+### Note: This requires a game in PLAYING status with cards dealt
+
+# @name playCard
+POST {{baseUrl}}/gameAction
+Content-Type: application/json
+
+{
+  "gameId": "{{createGame.response.body.gameId}}",
+  "playerName": "Alice",
+  "action": "playCard",
+  "card": "Green14"
+}
+
+### ============================================
+### Test Invalid Actions
+### ============================================
+
+# Test invalid action
+POST {{baseUrl}}/gameAction
+Content-Type: application/json
+
+{
+  "gameId": "{{createGame.response.body.gameId}}",
+  "playerName": "Alice",
+  "action": "invalidAction"
+}
+
+### Test playCard with invalid card
+POST {{baseUrl}}/gameAction
+Content-Type: application/json
+
+{
+  "gameId": "{{createGame.response.body.gameId}}",
+  "playerName": "Alice",
+  "action": "playCard",
+  "card": "InvalidCard"
+}
+
+### Test playCard when not player's turn
+POST {{baseUrl}}/gameAction
+Content-Type: application/json
+
+{
+  "gameId": "{{createGame.response.body.gameId}}",
+  "playerName": "Bob",
+  "action": "playCard",
+  "card": "Red10"
+}

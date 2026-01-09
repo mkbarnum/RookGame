@@ -132,13 +132,37 @@ else
 fi
 
 # Step 5: Install frontend dependencies and start
-echo -e "${BLUE}[5/5] Starting frontend...${NC}"
+echo -e "${BLUE}[5/6] Starting frontend...${NC}"
 cd "$FRONTEND_DIR"
 if [ ! -d "node_modules" ]; then
     npm install
 fi
 
-# Start frontend (this will stay in foreground)
+# Start frontend in background
+echo -e "${BLUE}Starting frontend dev server...${NC}"
+cd "$FRONTEND_DIR"
+BROWSER=none npm start > /dev/null 2>&1 &
+FRONTEND_PID=$!
+
+# Wait for frontend to be ready
+echo -e "${BLUE}Waiting for frontend to be ready...${NC}"
+sleep 8
+
+# Check if frontend is responding
+if curl -s http://localhost:3000 > /dev/null 2>&1; then
+    echo -e "${GREEN}      ✓ Frontend running at http://localhost:3000${NC}"
+else
+    echo -e "${YELLOW}      ⚠ Frontend may still be starting...${NC}"
+fi
+
+# Step 6: Run auto-test script to open 4 tabs
+echo -e "${BLUE}[6/6] Running auto-test to open 4 browser tabs...${NC}"
+cd "$FRONTEND_DIR"
+node scripts/auto-test.js || {
+    echo -e "${YELLOW}      ⚠ Auto-test script failed (this is OK if you don't want auto-tabs)${NC}"
+}
+
+# Display final status
 echo -e "${GREEN}"
 echo "╔═══════════════════════════════════════════════════════════╗"
 echo "║                   ✅ ALL SERVICES STARTED                  ║"
@@ -146,16 +170,14 @@ echo "╠═══════════════════════�
 echo "║                                                           ║"
 echo "║   Frontend:     http://localhost:3000                     ║"
 echo "║   Backend API:  http://localhost:3001                     ║"
+echo "║   WebSocket:    ws://localhost:3001/ws                     ║"
 echo "║   DynamoDB:     http://localhost:8000                     ║"
 echo "║                                                           ║"
+echo "║   4 browser tabs should have opened automatically!        ║"
 echo "║   Press Ctrl+C to stop all services                       ║"
 echo "║                                                           ║"
 echo "╚═══════════════════════════════════════════════════════════╝"
 echo -e "${NC}"
 
-# Start frontend in foreground
-npm start &
-FRONTEND_PID=$!
-
-# Wait for both processes
+# Wait for processes
 wait $FRONTEND_PID $BACKEND_PID

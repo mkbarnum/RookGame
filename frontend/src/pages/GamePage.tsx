@@ -1,465 +1,230 @@
-import React, { useState, useEffect, useCallback } from 'react';
-import { Link, useLocation } from 'react-router-dom';
+import React, { useState, useEffect } from 'react';
+import { Card as CardType, TrickWonNotification } from '../types/game';
+import { useGameState, useWebSocket } from '../hooks';
+import {
+  Card,
+  PlayerInfo,
+  TrickArea,
+  KittyDisplay,
+  DiscardUI,
+  WaitingLobby,
+  BiddingUI,
+  TrickWonNotification as TrickWonNotificationComponent,
+} from '../components';
+import { ScoresModal } from '../components/ScoresModal';
+import { sortCards, isCardPlayable, cardToString, parseCard } from '../utils/cardUtils';
+import { getAbsoluteSeat, isMyPartner } from '../utils/seatUtils';
 import { API_BASE_URL } from '../config';
 import './GamePage.css';
 
-// Player type definition
-interface Player {
-  seat: number;
-  name: string;
-}
-
-// Game state from navigation or localStorage
-interface GameState {
-  gameId: string;
-  playerName: string;
-  seat: number;
-  isHost: boolean;
-  players: Player[];
-  status: string;
-  teams?: { team0: number[]; team1: number[] } | null;
-}
-
-// Card type definition
-interface Card {
-  color: 'Green' | 'Red' | 'Yellow' | 'Black' | 'Rook';
-  rank: number | null; // null for Rook card
-}
-
-// Dummy data for user's hand (only shown when game is PLAYING)
-const userHand: Card[] = [
-  { color: 'Green', rank: 1 },
-  { color: 'Green', rank: 14 },
-  { color: 'Green', rank: 10 },
-  { color: 'Green', rank: 5 },
-  { color: 'Red', rank: 1 },
-  { color: 'Red', rank: 12 },
-  { color: 'Red', rank: 7 },
-  { color: 'Yellow', rank: 14 },
-  { color: 'Yellow', rank: 11 },
-  { color: 'Yellow', rank: 6 },
-  { color: 'Black', rank: 13 },
-  { color: 'Black', rank: 9 },
-  { color: 'Rook', rank: null },
-];
-
-// Sort cards: group by color, within each color sort by rank (1 is highest)
-const sortCards = (cards: Card[]): Card[] => {
-  const colorOrder: Record<string, number> = {
-    Green: 0,
-    Red: 1,
-    Yellow: 2,
-    Black: 3,
-    Rook: 4,
-  };
-
-  const getRankValue = (rank: number | null): number => {
-    if (rank === null) return -1;
-    if (rank === 1) return 15;
-    return rank;
-  };
-
-  return [...cards].sort((a, b) => {
-    const colorDiff = colorOrder[a.color] - colorOrder[b.color];
-    if (colorDiff !== 0) return colorDiff;
-    return getRankValue(b.rank) - getRankValue(a.rank);
-  });
-};
-
-// Get color symbol for display
-const getColorSymbol = (color: string): string => {
-  switch (color) {
-    case 'Green': return '●';
-    case 'Red': return '●';
-    case 'Yellow': return '●';
-    case 'Black': return '●';
-    default: return '♜';
-  }
-};
-
-// Component for rendering a single card
-const CardComponent: React.FC<{ card: Card; onClick?: () => void }> = ({ card, onClick }) => {
-  const colorClass = card.color.toLowerCase();
-  const isRook = card.color === 'Rook';
-
-  return (
-    <button className={`card ${colorClass}`} onClick={onClick} type="button">
-      <span className="card-top">
-        {isRook ? '♜' : card.rank}
-      </span>
-      <span className="card-symbol">
-        {isRook ? 'ROOK' : getColorSymbol(card.color)}
-      </span>
-      <span className="card-bottom">
-        {isRook ? '♜' : card.rank}
-      </span>
-    </button>
-  );
-};
-
-// Component for a face-down card (simplified)
-const CardBack: React.FC = () => (
-  <div className="card card-back">
-    <span className="back-pattern">♜</span>
-  </div>
-);
-
-// Player info component
-interface PlayerInfoProps {
-  name: string;
-  cardCount: number;
-  position: 'top' | 'left' | 'right';
-  isPartner?: boolean;
-  isCurrentTurn?: boolean;
-}
-
-const PlayerInfo: React.FC<PlayerInfoProps> = ({ 
-  name, 
-  cardCount, 
-  position, 
-  isPartner,
-  isCurrentTurn 
-}) => (
-  <div className={`player-info player-${position} ${isPartner ? 'partner' : ''} ${isCurrentTurn ? 'current-turn' : ''}`}>
-    <div className="player-avatar">
-      {name[0].toUpperCase()}
-    </div>
-    <div className="player-details">
-      <span className="player-name">{name}</span>
-      {isPartner && <span className="partner-badge">Partner</span>}
-    </div>
-    <div className="player-card-count">
-      <CardBack />
-      <span className="count">{cardCount}</span>
-    </div>
-  </div>
-);
-
-// Trick area with played cards
-const TrickArea: React.FC = () => (
-  <div className="trick-area">
-    <div className="trick-center">
-      <span className="trick-label">Play Area</span>
-    </div>
-    {/* Card slots for each player position */}
-    <div className="trick-slot slot-top"></div>
-    <div className="trick-slot slot-left"></div>
-    <div className="trick-slot slot-right"></div>
-    <div className="trick-slot slot-bottom"></div>
-  </div>
-);
-
-// Kitty display
-const KittyDisplay: React.FC<{ cardCount: number }> = ({ cardCount }) => (
-  <div className="kitty-display">
-    <div className="kitty-stack">
-      {Array.from({ length: Math.min(cardCount, 3) }).map((_, i) => (
-        <div key={i} className="kitty-card" style={{ transform: `translateY(${i * -2}px) rotate(${(i - 1) * 3}deg)` }}>
-          <CardBack />
-        </div>
-      ))}
-    </div>
-    <span className="kitty-label">Kitty ({cardCount})</span>
-  </div>
-);
-
-// Partner Selection Modal Component
-interface PartnerSelectionModalProps {
-  isOpen: boolean;
-  onClose: () => void;
-  players: Player[];
-  gameId: string;
-  onPartnerSelected: () => void;
-}
-
-const PartnerSelectionModal: React.FC<PartnerSelectionModalProps> = ({ 
-  isOpen, 
-  onClose, 
-  players, 
-  gameId,
-  onPartnerSelected 
-}) => {
-  const [isSelectingPartner, setIsSelectingPartner] = useState(false);
-  
-  // Get other players (not the host)
-  const otherPlayers = players.filter(p => p.seat !== 0);
-  
-  // Handle partner selection
-  const handleChoosePartner = async (partnerSeat: number) => {
-    if (isSelectingPartner) return;
-    
-    setIsSelectingPartner(true);
-    try {
-      const response = await fetch(`${API_BASE_URL}/choosePartner`, {
-        method: 'POST',
-        headers: {
-          'Content-Type': 'application/json',
-        },
-        body: JSON.stringify({
-          gameId,
-          partnerSeat,
-        }),
-      });
-
-      const data = await response.json();
-
-      if (!response.ok || !data.success) {
-        throw new Error(data.message || 'Failed to select partner');
-      }
-
-      console.log('Partner selected:', data);
-      
-      // Close modal and refresh game state
-      onClose();
-      onPartnerSelected();
-    } catch (error) {
-      console.error('Error selecting partner:', error);
-      alert(error instanceof Error ? error.message : 'Failed to select partner');
-    } finally {
-      setIsSelectingPartner(false);
-    }
-  };
-
-  if (!isOpen) return null;
-
-  return (
-    <div className="modal-overlay" onClick={onClose}>
-      <div className="modal-content" onClick={(e) => e.stopPropagation()}>
-        <div className="modal-header">
-          <h2>Choose Your Partner</h2>
-          <button className="modal-close" onClick={onClose} type="button">×</button>
-        </div>
-        <div className="modal-body">
-          <p className="modal-hint">Select one player to be your teammate</p>
-          <div className="partner-options">
-            {otherPlayers.map(player => (
-              <button
-                key={player.seat}
-                type="button"
-                className="partner-btn"
-                onClick={() => handleChoosePartner(player.seat)}
-                disabled={isSelectingPartner}
-              >
-                <div className="partner-avatar">{player.name[0].toUpperCase()}</div>
-                <div className="partner-name">{player.name}</div>
-                {isSelectingPartner && <div className="partner-loading">...</div>}
-              </button>
-            ))}
-          </div>
-        </div>
-      </div>
-    </div>
-  );
-};
-
-// Waiting Lobby Component (shown when waiting for players)
-interface WaitingLobbyProps {
-  gameState: GameState;
-  onRefresh: () => void;
-  isRefreshing: boolean;
-  onPartnerSelected?: () => void;
-}
-
-const WaitingLobby: React.FC<WaitingLobbyProps> = ({ gameState, onRefresh, isRefreshing, onPartnerSelected }) => {
-  const seatLabels = ['Host', 'Player 2', 'Player 3', 'Player 4'];
-  const [showPartnerModal, setShowPartnerModal] = useState(false);
-  
-  // Create a map of occupied seats
-  const seatMap = new Map<number, Player>();
-  gameState.players.forEach(p => seatMap.set(p.seat, p));
-
-  return (
-    <div className="waiting-lobby">
-      <div className="waiting-card">
-        <div className="waiting-header">
-          <div className="rook-icon">♜</div>
-          <h1>Waiting for Players</h1>
-          <p className="status-text">
-            {gameState.status === 'FULL' 
-              ? 'All players joined! Waiting to start...' 
-              : `${gameState.players.length}/4 players joined`}
-          </p>
-        </div>
-
-        <div className="game-code-section">
-          <label>Game Code</label>
-          <div className="game-code-display">
-            <span className="code">{gameState.gameId}</span>
-            <button 
-              className="copy-btn"
-              onClick={() => {
-                navigator.clipboard.writeText(gameState.gameId);
-              }}
-              title="Copy game code"
-            >
-              📋
-            </button>
-          </div>
-          <p className="share-hint">Share this code with friends to join!</p>
-        </div>
-
-        <div className="players-section">
-          <h3>Players</h3>
-          <div className="players-grid">
-            {[0, 1, 2, 3].map(seat => {
-              const player = seatMap.get(seat);
-              const isYou = seat === gameState.seat;
-              
-              return (
-                <div 
-                  key={seat} 
-                  className={`player-slot ${player ? 'occupied' : 'empty'} ${isYou ? 'is-you' : ''}`}
-                >
-                  <div className="player-avatar-slot">
-                    {player ? player.name[0].toUpperCase() : '?'}
-                  </div>
-                  <div className="player-info-slot">
-                    <span className="player-label">{seatLabels[seat]}</span>
-                    <span className="player-name-slot">
-                      {player ? player.name : 'Waiting...'}
-                      {isYou && ' (You)'}
-                    </span>
-                  </div>
-                  <div className={`status-indicator ${player ? 'ready' : 'waiting'}`}>
-                    {player ? '✓' : '○'}
-                  </div>
-                </div>
-              );
-            })}
-          </div>
-        </div>
-
-        {/* Start Game button - only show if game is FULL and user is host */}
-        {gameState.status === 'FULL' && gameState.isHost && gameState.players.length === 4 && (
-          <button 
-            type="button"
-            className="start-game-btn"
-            onClick={() => setShowPartnerModal(true)}
-          >
-            🎮 Start Game
-          </button>
-        )}
-
-        {/* Waiting message for non-hosts when game is full */}
-        {gameState.status === 'FULL' && !gameState.isHost && (
-          <div className="waiting-message">
-            <p>⏳ Waiting for host to start the game...</p>
-          </div>
-        )}
-
-        {/* Partner Selection Modal */}
-        <PartnerSelectionModal
-          isOpen={showPartnerModal}
-          onClose={() => setShowPartnerModal(false)}
-          players={gameState.players}
-          gameId={gameState.gameId}
-          onPartnerSelected={() => {
-            setShowPartnerModal(false);
-            if (onPartnerSelected) {
-              onPartnerSelected();
-            }
-          }}
-        />
-
-        <Link to="/" className="leave-btn">
-          ← Leave Game
-        </Link>
-      </div>
-    </div>
-  );
-};
-
 const GamePage: React.FC = () => {
-  const location = useLocation();
-  const sortedHand = sortCards(userHand);
-  
-  // Initialize game state from navigation state or localStorage
-  const [gameState, setGameState] = useState<GameState>(() => {
-    // Try to get from navigation state first
-    const navState = location.state as Partial<GameState> | null;
-    
-    if (navState?.gameId && navState?.playerName !== undefined) {
-      return {
-        gameId: navState.gameId,
-        playerName: navState.playerName,
-        seat: navState.seat ?? 0,
-        isHost: navState.isHost ?? false,
-        players: navState.players ?? [],
-        status: 'LOBBY',
-      };
-    }
-    
-    // Fall back to localStorage
-    const storedGameId = localStorage.getItem('rook_gameId');
-    const storedPlayerName = localStorage.getItem('rook_playerName');
-    const storedSeat = localStorage.getItem('rook_seat');
-    const storedIsHost = localStorage.getItem('rook_isHost');
-    const storedPlayers = localStorage.getItem('rook_players');
-    
-    return {
-      gameId: storedGameId || 'UNKNOWN',
-      playerName: storedPlayerName || 'Player',
-      seat: storedSeat ? parseInt(storedSeat, 10) : 0,
-      isHost: storedIsHost === 'true',
-      players: storedPlayers ? JSON.parse(storedPlayers) : [],
-      status: 'LOBBY',
-    };
-  });
+  const {
+    gameState,
+    setGameState,
+    biddingState,
+    setBiddingState,
+    isRefreshing,
+    refreshGameState,
+  } = useGameState();
 
-  const [isRefreshing, setIsRefreshing] = useState(false);
+  const [playerHand, setPlayerHand] = useState<CardType[]>([]);
+  const [currentTrick, setCurrentTrick] = useState<{ seat: number; card: CardType }[]>([]);
+  const [trickWonNotification, setTrickWonNotification] = useState<TrickWonNotification | null>(null);
+  const [showScoresModal, setShowScoresModal] = useState(false);
+  const [handHistory, setHandHistory] = useState<any[]>([]);
 
-  // Polling to refresh game state
-  const refreshGameState = useCallback(async () => {
-    if (!gameState.gameId || gameState.gameId === 'UNKNOWN') return;
-    
-    setIsRefreshing(true);
-    try {
-      // Use the games endpoint to get current state
-      const response = await fetch(`${API_BASE_URL}/games`);
-      const data = await response.json();
-      
-      // Find our game
-      const game = data.games?.find((g: any) => g.gameId === gameState.gameId);
-      
-      if (game) {
-        setGameState(prev => ({
+  const sortedHand = sortCards(playerHand);
+
+  // Determine which team is "You + Partner" for scores display
+  const myTeam = gameState.teams?.team0.includes(gameState.seat) ? 'team0' : 'team1';
+  const myTeamScore = gameState.teamScores?.[myTeam] || 0;
+  const opponentTeam = myTeam === 'team0' ? 'team1' : 'team0';
+  const opponentTeamScore = gameState.teamScores?.[opponentTeam] || 0;
+
+  // When I'm in the kitty discard / trump selection phase, hide other
+  // players' info panels so they don't visually overlap the discard UI,
+  // especially on mobile where side players are absolutely positioned.
+  const isMyDiscardPhase =
+    gameState.status === 'TRUMP_SELECTION' && gameState.bidWinner === gameState.seat;
+
+  // WebSocket handlers
+  const { sendMessage, connected: wsConnected } = useWebSocket({
+    gameState,
+    onDeal: (cards) => {
+      setPlayerHand(cards);
+      console.log(`Received ${cards.length} cards`);
+    },
+    onSeatsRearranged: (players, teams) => {
+      const myNewSeat = players.find((p) => p.name === gameState.playerName)?.seat;
+      if (myNewSeat !== undefined) {
+        setGameState((prev) => ({
           ...prev,
-          players: game.players || [],
-          status: game.status || prev.status,
-          teams: game.teams || null,
+          players,
+          seat: myNewSeat,
+          teams: teams || prev.teams,
         }));
-        
-        // Update localStorage
-        localStorage.setItem('rook_players', JSON.stringify(game.players));
-        if (game.teams) {
-          localStorage.setItem('rook_teams', JSON.stringify(game.teams));
+        localStorage.setItem('rook_seat', myNewSeat.toString());
+        localStorage.setItem('rook_players', JSON.stringify(players));
+        if (teams) {
+          localStorage.setItem('rook_teams', JSON.stringify(teams));
         }
+        console.log(`Seats rearranged. My new seat: ${myNewSeat}`);
       }
-    } catch (error) {
-      console.error('Error refreshing game state:', error);
-    } finally {
-      setIsRefreshing(false);
-    }
-  }, [gameState.gameId]);
-
-  // Auto-refresh every 3 seconds while in LOBBY/FULL/PARTNER_SELECTION status
-  useEffect(() => {
-    if (gameState.status === 'LOBBY' || gameState.status === 'FULL' || gameState.status === 'PARTNER_SELECTION') {
-      const interval = setInterval(refreshGameState, 3000);
-      return () => clearInterval(interval);
-    }
-  }, [gameState.status, refreshGameState]);
-
-  // Initial refresh on mount
-  useEffect(() => {
-    refreshGameState();
-  }, [refreshGameState]);
+    },
+    onBiddingStart: (startingPlayer, minBid) => {
+      setBiddingState({
+        highBid: 0,
+        currentBidder: startingPlayer,
+        minBid,
+      });
+      setGameState((prev) => ({
+        ...prev,
+        status: 'BIDDING',
+      }));
+      console.log('Bidding started. Starting player:', startingPlayer);
+    },
+    onBidPlaced: (amount, seat) => {
+      setBiddingState((prev) => ({
+        ...prev,
+        highBid: amount,
+      }));
+      console.log(`Player ${seat} bid ${amount}`);
+    },
+    onPlayerPassed: (seat) => {
+      console.log(`Player ${seat} passed`);
+    },
+    onNextBidder: (seat) => {
+      setBiddingState((prev) => ({
+        ...prev,
+        currentBidder: seat,
+      }));
+      console.log(`Next bidder: seat ${seat}`);
+    },
+    onKitty: (kittyCards) => {
+      setPlayerHand((prev) => {
+        const currentCardCount = prev.length;
+        if (currentCardCount >= 18) {
+          console.log(`Already have ${currentCardCount} cards, ignoring duplicate kitty`);
+          return prev;
+        }
+        const newHand = [...prev, ...kittyCards];
+        console.log(`Received ${kittyCards.length} kitty cards, now have ${newHand.length} total`);
+        return newHand;
+      });
+      setGameState((prev) => ({
+        ...prev,
+        status: 'TRUMP_SELECTION',
+      }));
+    },
+    onBiddingWon: (winner, amount) => {
+      setBiddingState((prev) => ({
+        ...prev,
+        currentBidder: null,
+      }));
+      setGameState((prev) => ({
+        ...prev,
+        status: 'TRUMP_SELECTION',
+        bidWinner: winner,
+        winningBid: amount,
+      }));
+      console.log(`Player ${winner} won the bid with ${amount} points`);
+    },
+    onTrumpChosen: (suit) => {
+      setGameState((prev) => ({
+        ...prev,
+        status: 'PLAYING',
+        trump: suit,
+      }));
+      console.log(`Trump suit chosen: ${suit}`);
+    },
+    onPlayStart: (leader) => {
+      setGameState((prev) => ({
+        ...prev,
+        status: 'PLAYING',
+        currentPlayer: leader,
+      }));
+      console.log(`Play started. Leader: seat ${leader}`);
+    },
+    onCardPlayed: (seat, cardString) => {
+      console.log(`Player ${seat} played card ${cardString}`);
+      const playedCard = parseCard(cardString);
+      setCurrentTrick((prev) => {
+        const newTrick = [...prev, { seat, card: playedCard }];
+        // If this is the first card of the trick, update ledSuit
+        if (prev.length === 0) {
+          const cardSuit = playedCard.color === 'Rook' ? gameState.trump : playedCard.color;
+          setGameState((prevState) => ({
+            ...prevState,
+            ledSuit: cardSuit,
+          }));
+        }
+        return newTrick;
+      });
+    },
+    onNextPlayer: (seat) => {
+      setGameState((prev) => ({
+        ...prev,
+        currentPlayer: seat,
+      }));
+      console.log(`Next player: seat ${seat}`);
+    },
+    onTrickWon: (winner, points) => {
+      console.log(`Player ${winner} won the trick with ${points} points`);
+      setTrickWonNotification({ winner, points });
+      setTimeout(() => {
+        setTrickWonNotification(null);
+      }, 3000);
+      setTimeout(() => {
+        setCurrentTrick([]);
+        // Clear ledSuit when trick is won
+        setGameState((prev) => ({
+          ...prev,
+          ledSuit: undefined,
+        }));
+      }, 2000);
+    },
+    onHandComplete: (message) => {
+      console.log('Hand complete:', message);
+      if (message.handHistory) {
+        setHandHistory(message.handHistory);
+      }
+      setGameState((prev) => ({
+        ...prev,
+        dealer: typeof message.dealer === 'number' ? message.dealer : prev.dealer,
+        teamScores: {
+          team0: message.team0Total,
+          team1: message.team1Total,
+        },
+        handHistory: message.handHistory || prev.handHistory,
+      }));
+      // Show scores after each hand (not just at game over) so we can
+      // quickly see results in testing mode.
+      setShowScoresModal(true);
+    },
+    onGameOver: (message) => {
+      console.log('Game over:', message);
+      setGameState((prev) => ({
+        ...prev,
+        status: 'FINISHED',
+      }));
+      // Show scores modal when game is over
+      // Use handHistory from state if available, otherwise from message
+      if (gameState.handHistory && gameState.handHistory.length > 0) {
+        setHandHistory(gameState.handHistory);
+      }
+      setShowScoresModal(true);
+    },
+    onError: (action, message) => {
+      console.error(`${action} error:`, message);
+      alert(message || 'An error occurred');
+    },
+  });
 
   // Show waiting lobby if game is not yet in playing state
   if (gameState.status === 'LOBBY' || gameState.status === 'FULL' || gameState.status === 'PARTNER_SELECTION') {
     return (
-      <WaitingLobby 
-        gameState={gameState} 
+      <WaitingLobby
+        gameState={gameState}
         onRefresh={refreshGameState}
         isRefreshing={isRefreshing}
         onPartnerSelected={refreshGameState}
@@ -472,76 +237,267 @@ const GamePage: React.FC = () => {
     <div className="game-container">
       {/* Compact header */}
       <header className="game-header">
-        <Link to="/" className="back-btn" aria-label="Leave game">
-          ←
-        </Link>
         <div className="game-status">
-          <span className="game-code">{gameState.gameId}</span>
-          <div className="game-stats">
-            <span className="stat">Bid: <strong>--</strong></span>
-            <span className="stat">Trump: <strong>--</strong></span>
+          <div className="game-stats-row">
+            <span className="stat">
+              Your Team: <strong>{myTeamScore}</strong>
+            </span>
+            <span className="stat">
+              Opponents: <strong>{opponentTeamScore}</strong>
+            </span>
+            <span className="stat">
+              Bid: <strong>{gameState.winningBid || '--'}</strong>
+            </span>
+            <span className="stat">
+              Trump: <strong>{gameState.trump || '--'}</strong>
+            </span>
+            <span className="stat">
+              Kitty: <strong>{gameState.bidWinner !== undefined && gameState.players ? gameState.players.find((p) => p.seat === gameState.bidWinner)?.name || 'Unknown' : '--'}</strong>
+            </span>
           </div>
-        </div>
-        <div className="connection-status connected">
-          <span className="status-dot"></span>
-          <span className="status-text">Connected</span>
         </div>
       </header>
 
       <main className="game-table">
-        {/* Top opponent (across from user) - this is the partner */}
+        {/* Top player (across from user) - relative position 2 */}
         <section className="table-section table-top">
-          <PlayerInfo 
-            name={gameState.players.find(p => p.seat === 2)?.name || 'Player 3'}
-            cardCount={13} 
-            position="top" 
-            isPartner={true}
-          />
+          {!isMyDiscardPhase &&
+            (() => {
+              const topSeat = getAbsoluteSeat(2, gameState.seat);
+              const topPlayer = gameState.players.find((p) => p.seat === topSeat);
+              return (
+                <PlayerInfo
+                  name={topPlayer?.name || `Player ${topSeat + 1}`}
+                  position="top"
+                  isPartner={isMyPartner(topSeat, gameState.seat, gameState.teams)}
+                  isCurrentTurn={
+                    (gameState.status === 'BIDDING' && biddingState.currentBidder === topSeat) ||
+                    (gameState.status === 'PLAYING' && gameState.currentPlayer === topSeat)
+                  }
+                />
+              );
+            })()}
         </section>
 
         {/* Middle section: side players + play area */}
         <section className="table-section table-middle">
-          <PlayerInfo 
-            name={gameState.players.find(p => p.seat === 1)?.name || 'Player 2'}
-            cardCount={13} 
-            position="left" 
-            isCurrentTurn={true}
-          />
-          
+          {/* Left player - relative position 1 */}
+          {!isMyDiscardPhase &&
+            (() => {
+              const leftSeat = getAbsoluteSeat(1, gameState.seat);
+              const leftPlayer = gameState.players.find((p) => p.seat === leftSeat);
+              return (
+                <PlayerInfo
+                  name={leftPlayer?.name || `Player ${leftSeat + 1}`}
+                  position="left"
+                  isPartner={isMyPartner(leftSeat, gameState.seat, gameState.teams)}
+                  isCurrentTurn={
+                    (gameState.status === 'BIDDING' && biddingState.currentBidder === leftSeat) ||
+                    (gameState.status === 'PLAYING' && gameState.currentPlayer === leftSeat)
+                  }
+                />
+              );
+            })()}
+
           <div className="center-area">
-            <TrickArea />
-            <KittyDisplay cardCount={5} />
+            {/* Bidding UI - shown when game is in BIDDING status */}
+            {gameState.status === 'BIDDING' ? (
+              <BiddingUI
+                highBid={biddingState.highBid}
+                currentBidder={biddingState.currentBidder}
+                mySeat={gameState.seat}
+                minBid={biddingState.minBid}
+                players={gameState.players}
+                onBid={(amount) => {
+                  const success = sendMessage({
+                    action: 'bid',
+                    amount,
+                    seat: gameState.seat,
+                  });
+                  if (!success) {
+                    console.error('Failed to send bid. WebSocket may not be connected.');
+                    alert('Failed to send bid. Please check your connection.');
+                  } else {
+                    console.log('Sent bid:', amount);
+                  }
+                }}
+                onPass={() => {
+                  const success = sendMessage({
+                    action: 'pass',
+                    seat: gameState.seat,
+                  });
+                  if (!success) {
+                    console.error('Failed to send pass. WebSocket may not be connected.');
+                    alert('Failed to send pass. Please check your connection.');
+                  } else {
+                    console.log('Sent pass');
+                  }
+                }}
+              />
+            ) : gameState.status === 'TRUMP_SELECTION' && gameState.bidWinner === gameState.seat ? (
+              <DiscardUI
+                hand={sortedHand}
+                onConfirm={(discardCards, trump) => {
+                  sendMessage({
+                    action: 'discardAndTrump',
+                    discard: discardCards,
+                    trump,
+                    seat: gameState.seat,
+                  });
+                  console.log('Sent discard and trump:', discardCards, trump);
+
+                  // Immediately remove discarded cards from UI
+                  setPlayerHand((prev) =>
+                    prev.filter((card) => {
+                      const cardString = cardToString(card);
+                      return !discardCards.includes(cardString);
+                    })
+                  );
+                }}
+              />
+            ) : gameState.status === 'TRUMP_SELECTION' && gameState.bidWinner !== gameState.seat ? (
+              <div className="pending-trump-popup">
+                <div className="pending-trump-content">
+                  <h3>Pending trump color...</h3>
+                  <p>
+                    Waiting for{' '}
+                    {gameState.players?.find((p) => p.seat === gameState.bidWinner)?.name || 'bid winner'} to choose
+                    trump suit.
+                  </p>
+                </div>
+              </div>
+            ) : gameState.status === 'PLAYING' ? (
+              <>
+                <TrickArea currentTrick={currentTrick} mySeat={gameState.seat} />
+                {trickWonNotification && (
+                  <TrickWonNotificationComponent notification={trickWonNotification} players={gameState.players} />
+                )}
+              </>
+            ) : (
+              <>
+                <TrickArea currentTrick={currentTrick} mySeat={gameState.seat} />
+                <KittyDisplay cardCount={5} />
+                {trickWonNotification && (
+                  <TrickWonNotificationComponent notification={trickWonNotification} players={gameState.players} />
+                )}
+              </>
+            )}
           </div>
 
-          <PlayerInfo 
-            name={gameState.players.find(p => p.seat === 3)?.name || 'Player 4'}
-            cardCount={13} 
-            position="right" 
-          />
+          {/* Right player - relative position 3 */}
+          {!isMyDiscardPhase &&
+            (() => {
+              const rightSeat = getAbsoluteSeat(3, gameState.seat);
+              const rightPlayer = gameState.players.find((p) => p.seat === rightSeat);
+              return (
+                <PlayerInfo
+                  name={rightPlayer?.name || `Player ${rightSeat + 1}`}
+                  position="right"
+                  isPartner={isMyPartner(rightSeat, gameState.seat, gameState.teams)}
+                  isCurrentTurn={
+                    (gameState.status === 'BIDDING' && biddingState.currentBidder === rightSeat) ||
+                    (gameState.status === 'PLAYING' && gameState.currentPlayer === rightSeat)
+                  }
+                />
+              );
+            })()}
         </section>
 
         {/* Bottom: local player's hand */}
         <section className="table-section table-bottom">
           <div className="local-player">
             <div className="local-player-header">
-              <div className="local-avatar">You</div>
-              <span className="local-name">{gameState.playerName}</span>
-              <span className="card-count-badge">{sortedHand.length} cards</span>
+              <div
+                className={`local-player-info ${
+                  (gameState.status === 'BIDDING' && biddingState.currentBidder === gameState.seat) ||
+                  (gameState.status === 'PLAYING' && gameState.currentPlayer === gameState.seat)
+                    ? 'current-turn'
+                    : ''
+                }`}
+              >
+                <div className="local-avatar">You</div>
+                <span className="local-name">{gameState.playerName}</span>
+                <span className="card-count-badge">{sortedHand.length} cards</span>
+              </div>
             </div>
             <div className="hand-container">
               <div className="hand-scroll">
-                {sortedHand.map((card, index) => (
-                  <CardComponent 
-                    key={index} 
-                    card={card}
-                    onClick={() => console.log('Played:', card)}
-                  />
-                ))}
+                {sortedHand.length > 0 ? (
+                  sortedHand.map((card, index) => {
+                    const isPlayable = isCardPlayable(card, sortedHand, gameState.ledSuit, gameState.trump);
+                    const isTurn = gameState.status === 'PLAYING' && gameState.currentPlayer === gameState.seat;
+                    return (
+                      <Card
+                        key={`${card.color}-${card.rank}-${index}`}
+                        card={card}
+                        onDoubleClick={() => {
+                          const cardString = cardToString(card);
+                          sendMessage({
+                            action: 'playCard',
+                            card: cardString,
+                          });
+                          console.log('Sent playCard:', cardString);
+
+                          // Immediately remove card from hand UI
+                          setPlayerHand((prev) =>
+                            prev.filter((c) => !(c.color === card.color && c.rank === card.rank))
+                          );
+                        }}
+                        disabled={!isTurn || !isPlayable}
+                      />
+                    );
+                  })
+                ) : (
+                  <div className="hand-empty">
+                    <p>Waiting for cards to be dealt...</p>
+                  </div>
+                )}
               </div>
             </div>
           </div>
         </section>
       </main>
+      {showScoresModal && gameState.teams && handHistory.length > 0 && (
+        <ScoresModal
+          handHistory={handHistory}
+          teams={gameState.teams}
+          mySeat={gameState.seat}
+          isDealer={gameState.dealer === gameState.seat}
+          isGameOver={
+            (() => {
+              const last = handHistory[handHistory.length - 1];
+              if (!last) return false;
+              return last.team0Total >= 500 || last.team1Total >= 500;
+            })()
+          }
+          onDealNextHand={async () => {
+            try {
+              const response = await fetch(`${API_BASE_URL}/startNextHand`, {
+                method: 'POST',
+                headers: {
+                  'Content-Type': 'application/json',
+                },
+                body: JSON.stringify({
+                  gameId: gameState.gameId,
+                  dealerSeat: gameState.seat,
+                }),
+              });
+              const data = await response.json();
+              if (!response.ok || !data.success) {
+                console.error('Failed to start next hand:', data);
+                alert(data.message || 'Failed to start next hand');
+                return;
+              }
+              // Close scores modal; new deal + biddingStart will come via WebSocket
+              setShowScoresModal(false);
+            } catch (error) {
+              console.error('Error starting next hand:', error);
+              alert('Error starting next hand. Please try again.');
+            }
+          }}
+          onClose={() => setShowScoresModal(false)}
+        />
+      )}
     </div>
   );
 };

@@ -1,0 +1,258 @@
+.scores-modal-overlay {
+  position: fixed;
+  top: 0;
+  left: 0;
+  right: 0;
+  bottom: 0;
+  background: rgba(0, 0, 0, 0.85);
+  backdrop-filter: blur(8px);
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  z-index: 2000;
+  padding: 1rem;
+  animation: fadeIn 0.2s ease-out;
+}
+
+.scores-modal-content {
+  background: rgba(26, 47, 35, 0.98);
+  backdrop-filter: blur(20px);
+  border-radius: 24px;
+  padding: 0;
+  max-width: 600px;
+  width: 100%;
+  max-height: 90vh;
+  overflow: hidden;
+  box-shadow: 0 25px 50px -12px rgba(0, 0, 0, 0.8),
+              0 0 0 1px rgba(255, 255, 255, 0.1);
+  animation: slideUp 0.3s ease-out;
+  display: flex;
+  flex-direction: column;
+}
+
+.scores-modal-header {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  padding: 1.5rem 2rem;
+  border-bottom: 1px solid rgba(255, 255, 255, 0.1);
+}
+
+.scores-modal-header h2 {
+  color: #f5f5f5;
+  font-size: 1.75rem;
+  font-weight: 700;
+  margin: 0;
+  letter-spacing: 0.1em;
+}
+
+.scores-modal-close {
+  width: 36px;
+  height: 36px;
+  border: none;
+  background: rgba(255, 255, 255, 0.1);
+  border-radius: 8px;
+  color: #a0a0a0;
+  font-size: 1.5rem;
+  line-height: 1;
+  cursor: pointer;
+  transition: all 0.2s;
+  display: flex;
+  align-items: center;
+  justify-content: center;
+}
+
+.scores-modal-close:hover {
+  background: rgba(255, 255, 255, 0.2);
+  color: #f5f5f5;
+}
+
+.scores-modal-body {
+  padding: 1.5rem 2rem 2rem;
+  overflow-y: auto;
+  flex: 1;
+}
+
+.scores-modal-footer {
+  padding: 1rem 2rem 1.5rem;
+  border-top: 1px solid rgba(255, 255, 255, 0.1);
+  display: flex;
+  align-items: center;
+  justify-content: center;
+}
+
+.scores-modal-deal-btn {
+  padding: 0.85rem 1.75rem;
+  border-radius: 999px;
+  border: none;
+  background: linear-gradient(135deg, #4ade80 0%, #22c55e 100%);
+  color: #0a1410;
+  font-size: 0.95rem;
+  font-weight: 700;
+  text-transform: uppercase;
+  letter-spacing: 0.08em;
+  cursor: pointer;
+  box-shadow: 0 4px 15px rgba(74, 222, 128, 0.4);
+  transition: all 0.2s ease;
+}
+
+.scores-modal-deal-btn:hover {
+  background: linear-gradient(135deg, #5ee883 0%, #2dd66f 100%);
+  box-shadow: 0 6px 20px rgba(74, 222, 128, 0.5);
+  transform: translateY(-1px);
+}
+
+.scores-modal-deal-btn:active {
+  transform: translateY(0);
+}
+
+.scores-modal-waiting {
+  font-size: 0.9rem;
+  color: #a0aec0;
+  text-align: center;
+}
+
+.scores-table {
+  width: 100%;
+  display: flex;
+  flex-direction: column;
+  gap: 0;
+}
+
+.scores-table-header {
+  display: grid;
+  grid-template-columns: 100px 1fr 1fr;
+  gap: 1rem;
+  padding: 0.75rem 0;
+  border-bottom: 2px solid rgba(255, 255, 255, 0.15);
+  font-weight: 600;
+  font-size: 0.9rem;
+  color: #a0a0a0;
+  text-transform: uppercase;
+  letter-spacing: 0.05em;
+}
+
+.scores-col-hand {
+  text-align: left;
+}
+
+.scores-col-team {
+  text-align: center;
+}
+
+.scores-table-body {
+  display: flex;
+  flex-direction: column;
+  gap: 0;
+}
+
+.scores-table-row {
+  display: grid;
+  grid-template-columns: 100px 1fr 1fr;
+  gap: 1rem;
+  padding: 1rem 0;
+  border-bottom: 1px solid rgba(255, 255, 255, 0.05);
+  transition: background 0.2s;
+}
+
+.scores-table-row:hover {
+  background: rgba(255, 255, 255, 0.03);
+}
+
+.hand-number {
+  font-size: 1.1rem;
+  font-weight: 700;
+  color: #4ecdc4;
+  margin-bottom: 0.25rem;
+}
+
+.hand-bid-info {
+  font-size: 0.75rem;
+  color: #808080;
+}
+
+.hand-score-value {
+  font-size: 1.25rem;
+  font-weight: 700;
+  color: #f5f5f5;
+  margin-bottom: 0.25rem;
+}
+
+.hand-score-value.positive {
+  color: #4ade80;
+}
+
+.hand-score-value.negative {
+  color: #f87171;
+}
+
+.hand-points-detail {
+  font-size: 0.8rem;
+  color: #808080;
+}
+
+.shoot-moon-badge {
+  font-size: 0.7rem;
+  color: #ffc857;
+  margin-top: 0.25rem;
+  font-weight: 600;
+}
+
+.scores-table-footer {
+  display: grid;
+  grid-template-columns: 100px 1fr 1fr;
+  gap: 1rem;
+  padding: 1.25rem 0;
+  margin-top: 0.5rem;
+  border-top: 2px solid rgba(255, 255, 255, 0.15);
+  font-size: 1.1rem;
+}
+
+.scores-table-footer .scores-col-hand {
+  color: #c0c0c0;
+}
+
+.total-score {
+  font-size: 1.5rem;
+  color: #4ecdc4;
+}
+
+/* Mobile responsive */
+@media (max-width: 767px) {
+  .scores-modal-content {
+    max-width: 100%;
+    max-height: 95vh;
+    border-radius: 16px;
+  }
+
+  .scores-modal-header {
+    padding: 1rem 1.25rem;
+  }
+
+  .scores-modal-header h2 {
+    font-size: 1.5rem;
+  }
+
+  .scores-modal-body {
+    padding: 1rem 1.25rem 1.5rem;
+  }
+
+  .scores-table-header,
+  .scores-table-row,
+  .scores-table-footer {
+    grid-template-columns: 80px 1fr 1fr;
+    gap: 0.75rem;
+  }
+
+  .hand-number {
+    font-size: 1rem;
+  }
+
+  .hand-score-value {
+    font-size: 1.1rem;
+  }
+
+  .total-score {
+    font-size: 1.3rem;
+  }
+}

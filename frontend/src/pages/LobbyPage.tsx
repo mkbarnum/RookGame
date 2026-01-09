@@ -1,84 +1,72 @@
-import React, { useState } from 'react';
-import { useNavigate } from 'react-router-dom';
-import { API_BASE_URL } from '../config';
+import React, { useState, useEffect } from 'react';
+import { useNavigate, useSearchParams } from 'react-router-dom';
+import { gameApi } from '../services/gameApi';
+import { localStorageUtils } from '../utils/localStorage';
 import './LobbyPage.css';
 
-interface Player {
-  seat: number;
-  name: string;
-}
-
-interface CreateGameResponse {
-  success: boolean;
-  gameId: string;
-  seat: number;
-  game: {
-    gameId: string;
-    hostName: string;
-    players: Player[];
-    status: string;
-  };
-  error?: string;
-  message?: string;
-}
-
-interface JoinGameResponse {
-  success: boolean;
-  gameId: string;
-  seat: number;
-  players: Player[];
-  status: string;
-  hostName: string;
-  error?: string;
-  message?: string;
-}
-
 const LobbyPage: React.FC = () => {
+  const [searchParams] = useSearchParams();
   const [playerName, setPlayerName] = useState('');
   const [gameCode, setGameCode] = useState('');
   const [isLoading, setIsLoading] = useState(false);
   const [error, setError] = useState<string | null>(null);
+  const [hasAutoJoined, setHasAutoJoined] = useState(false);
   const navigate = useNavigate();
 
-  const handleCreateGame = async () => {
-    if (!playerName.trim()) return;
-    
+  // Auto-join functionality: fill form fields and click button
+  useEffect(() => {
+    const autoJoin = searchParams.get('autoJoin');
+    const urlGameId = searchParams.get('gameId');
+    const urlPlayerName = searchParams.get('playerName');
+    const isHost = searchParams.get('isHost') === 'true';
+
+    if (autoJoin === 'true' && urlPlayerName && !hasAutoJoined) {
+      setHasAutoJoined(true);
+
+      // Fill in the form fields
+      setPlayerName(urlPlayerName);
+      if (urlGameId) {
+        setGameCode(urlGameId);
+      }
+
+      // Wait a moment for form to render, then automatically click the appropriate button
+      const timer = setTimeout(() => {
+        if (isHost) {
+          handleCreateGame(urlPlayerName);
+        } else if (urlGameId) {
+          handleJoinGame(urlPlayerName, urlGameId);
+        }
+      }, 800);
+
+      return () => clearTimeout(timer);
+    }
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, [searchParams, hasAutoJoined]);
+
+  const handleCreateGame = async (nameOverride?: string) => {
+    const name = nameOverride || playerName.trim();
+    if (!name) return;
+
     setIsLoading(true);
     setError(null);
 
     try {
-      const response = await fetch(`${API_BASE_URL}/createGame`, {
-        method: 'POST',
-        headers: {
-          'Content-Type': 'application/json',
-        },
-        body: JSON.stringify({ hostName: playerName.trim() }),
-      });
+      const data = await gameApi.createGame(name);
 
-      const data: CreateGameResponse = await response.json();
-
-      if (!response.ok || !data.success) {
-        throw new Error(data.message || 'Failed to create game');
-      }
-
-      // Store game info in localStorage for the game page
-      localStorage.setItem('rook_gameId', data.gameId);
-      localStorage.setItem('rook_playerName', playerName.trim());
-      localStorage.setItem('rook_seat', data.seat.toString());
-      localStorage.setItem('rook_isHost', 'true');
-      localStorage.setItem('rook_players', JSON.stringify(data.game.players));
+      // Store game info in localStorage
+      localStorageUtils.saveGameState(data.gameId, name, data.seat, true, data.game.players);
 
       console.log('Created game:', data.gameId);
-      
+
       // Navigate to game page
-      navigate('/game', { 
-        state: { 
-          playerName: playerName.trim(), 
+      navigate('/game', {
+        state: {
+          playerName: name,
           gameId: data.gameId,
           seat: data.seat,
           isHost: true,
           players: data.game.players,
-        } 
+        },
       });
     } catch (err) {
       console.error('Error creating game:', err);
@@ -88,10 +76,13 @@ const LobbyPage: React.FC = () => {
     }
   };
 
-  const handleJoinGame = async () => {
-    console.log('Join Game clicked!', { playerName, gameCode, isLoading });
-    
-    if (!playerName.trim() || !gameCode.trim()) {
+  const handleJoinGame = async (nameOverride?: string, codeOverride?: string) => {
+    const name = nameOverride || playerName.trim();
+    const code = codeOverride || gameCode.trim();
+
+    console.log('Join Game clicked!', { name, code, isLoading });
+
+    if (!name || !code) {
       console.log('Validation failed - name or code empty');
       return;
     }
@@ -100,46 +91,60 @@ const LobbyPage: React.FC = () => {
     setError(null);
 
     try {
-      console.log('Fetching:', `${API_BASE_URL}/joinGame`);
-      const response = await fetch(`${API_BASE_URL}/joinGame`, {
-        method: 'POST',
-        headers: {
-          'Content-Type': 'application/json',
-        },
-        body: JSON.stringify({ 
-          gameId: gameCode.trim().toUpperCase(), 
-          playerName: playerName.trim() 
-        }),
-      });
+      console.log('Fetching:', `${gameApi}`);
+      const data = await gameApi.joinGame(code, name);
 
-      const data: JoinGameResponse = await response.json();
-
-      if (!response.ok || !data.success) {
-        throw new Error(data.message || 'Failed to join game');
-      }
-
-      // Store game info in localStorage for the game page
-      localStorage.setItem('rook_gameId', data.gameId);
-      localStorage.setItem('rook_playerName', playerName.trim());
-      localStorage.setItem('rook_seat', data.seat.toString());
-      localStorage.setItem('rook_isHost', 'false');
-      localStorage.setItem('rook_players', JSON.stringify(data.players));
+      // Store game info in localStorage
+      localStorageUtils.saveGameState(data.gameId, name, data.seat, false, data.players);
 
       console.log('Joined game:', data.gameId, 'at seat:', data.seat);
 
       // Navigate to game page
-      navigate('/game', { 
-        state: { 
-          playerName: playerName.trim(), 
+      navigate('/game', {
+        state: {
+          playerName: name,
           gameId: data.gameId,
           seat: data.seat,
           isHost: false,
           players: data.players,
-        } 
+        },
       });
     } catch (err) {
-      console.error('Error joining game:', err);
-      setError(err instanceof Error ? err.message : 'Failed to join game');
+      // If error is "name taken" or "already in the game", automatically log them in
+      const errorMessage = err instanceof Error ? err.message : 'Failed to join game';
+      if (
+        errorMessage.includes('already in the game') ||
+        errorMessage.includes('Name taken') ||
+        errorMessage.includes('name is already in the game')
+      ) {
+        console.log(`Name "${name}" already exists in game, logging in automatically...`);
+
+        // Try to find the player and auto-login
+        const existingPlayer = await gameApi.findPlayerInGame(code, name);
+        if (existingPlayer) {
+          const gamesData = await gameApi.getAllGames();
+          const game = gamesData.games?.find((g: any) => g.gameId === code.toUpperCase());
+          if (game) {
+            localStorageUtils.saveGameState(game.gameId, name, existingPlayer.seat, existingPlayer.seat === 0, game.players);
+
+            navigate('/game', {
+              state: {
+                playerName: name,
+                gameId: game.gameId,
+                seat: existingPlayer.seat,
+                isHost: existingPlayer.seat === 0,
+                players: game.players,
+              },
+            });
+            setIsLoading(false);
+            return;
+          }
+        }
+        // If we can't find the player, show a helpful message
+        setError(`Name "${name}" is already taken in this game. Please use a different name.`);
+      } else {
+        setError(errorMessage);
+      }
     } finally {
       setIsLoading(false);
     }
@@ -154,11 +159,7 @@ const LobbyPage: React.FC = () => {
           <p className="subtitle">Multiplayer Card Game</p>
         </div>
 
-        {error && (
-          <div className="error-message">
-            {error}
-          </div>
-        )}
+        {error && <div className="error-message">{error}</div>}
 
         <div className="lobby-form">
           <div className="input-group">
@@ -178,10 +179,10 @@ const LobbyPage: React.FC = () => {
             <span>Start Playing</span>
           </div>
 
-          <button 
+          <button
             type="button"
             className="btn btn-primary"
-            onClick={handleCreateGame}
+            onClick={() => handleCreateGame()}
             disabled={!playerName.trim() || isLoading}
           >
             {isLoading ? 'Creating...' : 'Create New Game'}
@@ -204,10 +205,10 @@ const LobbyPage: React.FC = () => {
                 disabled={isLoading}
               />
             </div>
-            <button 
+            <button
               type="button"
               className="btn btn-secondary"
-              onClick={handleJoinGame}
+              onClick={() => handleJoinGame()}
               disabled={!playerName.trim() || !gameCode.trim() || isLoading}
             >
               {isLoading ? 'Joining...' : 'Join Game'}

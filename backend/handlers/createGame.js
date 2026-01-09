@@ -21,40 +21,6 @@ const {
  */
 const MAX_CODE_ATTEMPTS = 5;
 
-/**
- * Check if a game code already exists
- * @param {string} gameId - Game code to check
- * @returns {Promise<boolean>} True if exists
- */
-async function gameExists(gameId) {
-  try {
-    const result = await docClient.send(new GetCommand({
-      TableName: GAMES_TABLE,
-      Key: { gameId },
-      ProjectionExpression: 'gameId',
-    }));
-    return !!result.Item;
-  } catch (error) {
-    console.error('Error checking game existence:', error);
-    throw error;
-  }
-}
-
-/**
- * Generate a unique game code that doesn't exist in the database
- * @returns {Promise<string>} Unique game code
- */
-async function generateUniqueGameCode() {
-  for (let attempt = 0; attempt < MAX_CODE_ATTEMPTS; attempt++) {
-    const code = generateGameCode();
-    const exists = await gameExists(code);
-    if (!exists) {
-      return code;
-    }
-    console.log(`Game code ${code} already exists, generating new one (attempt ${attempt + 1})`);
-  }
-  throw new Error('Failed to generate unique game code after multiple attempts');
-}
 
 /**
  * Lambda handler for creating a new game
@@ -62,7 +28,7 @@ async function generateUniqueGameCode() {
  * @returns {Promise<object>} HTTP response
  */
 async function handler(event) {
-  console.log('CreateGame event:', JSON.stringify(event));
+  // Removed verbose event logging for performance
 
   try {
     // Parse request body
@@ -95,19 +61,36 @@ async function handler(event) {
       });
     }
 
-    // Generate unique game code
-    const gameId = await generateUniqueGameCode();
+    // Generate unique game code and create game in one operation
+    let gameId;
+    let gameState;
 
-    // Create initial game state
-    const gameState = createInitialGameState(gameId, trimmedHostName);
+    for (let attempt = 0; attempt < MAX_CODE_ATTEMPTS; attempt++) {
+      gameId = generateGameCode();
+      gameState = createInitialGameState(gameId, trimmedHostName);
 
-    // Store in DynamoDB
-    await docClient.send(new PutCommand({
-      TableName: GAMES_TABLE,
-      Item: gameState,
-      // Ensure we don't overwrite an existing game (extra safety)
-      ConditionExpression: 'attribute_not_exists(gameId)',
-    }));
+      try {
+        // Try to create the game directly
+        await docClient.send(new PutCommand({
+          TableName: GAMES_TABLE,
+          Item: gameState,
+          ConditionExpression: 'attribute_not_exists(gameId)',
+        }));
+
+        // Success! Game created
+        break;
+      } catch (error) {
+        if (error.name === 'ConditionalCheckFailedException') {
+          // Game code already exists, try again
+          continue;
+        }
+        throw error;
+      }
+    }
+
+    if (!gameId) {
+      throw new Error('Failed to generate unique game code after multiple attempts');
+    }
 
     console.log(`Created new game: ${gameId} by ${trimmedHostName}`);
 

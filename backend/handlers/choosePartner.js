@@ -10,12 +10,23 @@
  */
 
 const { GetCommand, UpdateCommand } = require('@aws-sdk/lib-dynamodb');
-const { docClient, GAMES_TABLE } = require('../shared/dynamodb');
+const { docClient, GAMES_TABLE, CONNECTIONS_TABLE } = require('../shared/dynamodb');
 const { 
   GameStatus,
   MAX_PLAYERS,
   buildResponse 
 } = require('../shared/gameUtils');
+const { dealGame } = require('../shared/dealUtils');
+// Use local WebSocket in development, AWS API Gateway in production
+const wsModule = process.env.DYNAMODB_ENDPOINT 
+  ? require('../shared/websocketLocal')
+  : require('../shared/websocket');
+const { 
+  createApiGatewayClient, 
+  sendToPlayer, 
+  broadcastToGame,
+  getGameConnections
+} = wsModule;
 
 /**
  * Fetch game from DynamoDB
@@ -31,9 +42,46 @@ async function getGame(gameId) {
 }
 
 /**
+ * Rearrange seats so partners sit across from each other
+ * Host (0) stays at bottom, partner moves to top (2)
+ * @param {Array} players - Original players array
+ * @param {number} partnerSeat - Original seat of chosen partner
+ * @returns {Array} Rearranged players array with new seat assignments
+ */
+function rearrangeSeats(players, partnerSeat) {
+  // Create a map of old seat -> new seat
+  // Host (0) -> 0 (bottom)
+  // Partner -> 2 (top, across from host)
+  // Other two players -> 1 and 3 (left and right)
+  
+  const seatMapping = {
+    0: 0, // Host stays at bottom
+  };
+  
+  // Partner goes to top (seat 2)
+  seatMapping[partnerSeat] = 2;
+  
+  // Find the other two players (not host, not partner)
+  const otherSeats = [0, 1, 2, 3].filter(seat => seat !== 0 && seat !== partnerSeat);
+  
+  // Assign them to left (1) and right (3)
+  seatMapping[otherSeats[0]] = 1;
+  seatMapping[otherSeats[1]] = 3;
+  
+  // Rearrange players array with new seats
+  const rearranged = players.map(player => ({
+    ...player,
+    seat: seatMapping[player.seat],
+  }));
+  
+  return rearranged;
+}
+
+/**
  * Determine teams based on host and chosen partner
- * @param {number} hostSeat - Seat of host (should be 0)
- * @param {number} partnerSeat - Seat of chosen partner
+ * After seat rearrangement, host is 0 and partner is 2
+ * @param {number} hostSeat - Seat of host (should be 0 after rearrangement)
+ * @param {number} partnerSeat - Seat of chosen partner (should be 2 after rearrangement)
  * @returns {object} Teams object with team0 and team1 arrays
  */
 function determineTeams(hostSeat, partnerSeat) {
@@ -138,25 +186,72 @@ async function handler(event) {
       });
     }
 
-    // Determine teams
-    const teams = determineTeams(0, partnerSeat);
+    // Rearrange seats so partners sit across from each other
+    // Host (0) stays at bottom, partner moves to top (2)
+    const rearrangedPlayers = rearrangeSeats(game.players, partnerSeat);
+    
+    // After rearrangement, partner is now at seat 2
+    const newPartnerSeat = 2;
+    
+    // Determine teams (host is 0, partner is 2)
+    const teams = determineTeams(0, newPartnerSeat);
 
-    // Update game state with teams and transition to BIDDING
+    // Update connections table to reflect new seat assignments
+    // We need to update the seat field for each connection
+    const connections = await getGameConnections(normalizedGameId);
+    const seatMapping = {};
+    rearrangedPlayers.forEach(player => {
+      const oldPlayer = game.players.find(p => p.name === player.name);
+      if (oldPlayer) {
+        seatMapping[oldPlayer.seat] = player.seat;
+      }
+    });
+
+    // Update connections with new seat numbers
+    // Note: In local development, connections are stored in-memory in server.js
+    // In production, they're in DynamoDB. We update DynamoDB here, and the
+    // local server will handle in-memory updates via the WebSocket message
+    for (const conn of connections) {
+      if (conn.seat !== null && conn.seat !== undefined && seatMapping[conn.seat] !== undefined) {
+        const newSeat = seatMapping[conn.seat];
+        // Update connection in DynamoDB
+        try {
+          await docClient.send(new UpdateCommand({
+            TableName: CONNECTIONS_TABLE,
+            Key: {
+              gameId: normalizedGameId,
+              connectionId: conn.connectionId,
+            },
+            UpdateExpression: 'SET #seat = :newSeat',
+            ExpressionAttributeNames: {
+              '#seat': 'seat',
+            },
+            ExpressionAttributeValues: {
+              ':newSeat': newSeat,
+            },
+          }));
+        } catch (error) {
+          console.warn(`Failed to update connection ${conn.connectionId} seat:`, error);
+        }
+      }
+    }
+    
+    // For local development, also update in-memory connections
+    // The local WebSocket client will handle this when it receives the seatsRearranged message
+
+    // Update game state with rearranged players and teams
     const result = await docClient.send(new UpdateCommand({
       TableName: GAMES_TABLE,
       Key: { gameId: normalizedGameId },
       UpdateExpression: `
-        SET teams = :teams,
-            #status = :newStatus,
+        SET players = :players,
+            teams = :teams,
             version = version + :one,
             updatedAt = :updatedAt
       `,
-      ExpressionAttributeNames: {
-        '#status': 'status',
-      },
       ExpressionAttributeValues: {
+        ':players': rearrangedPlayers,
         ':teams': teams,
-        ':newStatus': GameStatus.BIDDING, // Move directly to bidding after partner selection
         ':one': 1,
         ':currentVersion': game.version,
         ':updatedAt': new Date().toISOString(),
@@ -170,14 +265,88 @@ async function handler(event) {
     console.log(`Host selected partner at seat ${partnerSeat} for game ${normalizedGameId}`);
     console.log(`Teams: Team 0 = [${teams.team0.join(', ')}], Team 1 = [${teams.team1.join(', ')}]`);
 
+    // Check that all players are connected via WebSocket before dealing
+    // Note: connections was already fetched above, but we need to re-fetch after seat updates
+    // to get the updated seat numbers
+    const apiGatewayClient = createApiGatewayClient({});
+    const connectionsAfterUpdate = await getGameConnections(normalizedGameId);
+    
+    // Get unique seats from connections (filter out null/undefined seats)
+    const connectedSeats = new Set(
+      connectionsAfterUpdate
+        .map(conn => conn.seat)
+        .filter(seat => seat !== null && seat !== undefined)
+    );
+    
+    // Check if all 4 players (seats 0-3) are connected
+    const allSeatsConnected = [0, 1, 2, 3].every(seat => connectedSeats.has(seat));
+    
+    if (!allSeatsConnected) {
+      const missingSeats = [0, 1, 2, 3].filter(seat => !connectedSeats.has(seat));
+      console.warn(`Not all players connected. Missing seats: ${missingSeats.join(', ')}`);
+      return buildResponse(400, {
+        error: 'Not all players connected',
+        message: `All players must be connected before dealing cards. Missing players at seats: ${missingSeats.join(', ')}. Please ensure all players have joined the game.`,
+        connectedSeats: Array.from(connectedSeats),
+        missingSeats,
+      });
+    }
+
+    console.log(`All players connected. Proceeding with deal.`);
+
+    // Now deal the cards
+    const { hands, kitty } = await dealGame(normalizedGameId, updatedGame.version);
+
+    // Send WebSocket messages to players
+    try {
+      // apiGatewayClient already created above
+
+      // Send private hand messages to each player
+      for (let seat = 0; seat < 4; seat++) {
+        const handKey = `hand${seat}`;
+        const playerCards = hands[handKey];
+        
+        await sendToPlayer(apiGatewayClient, normalizedGameId, seat, {
+          action: 'deal',
+          cards: playerCards,
+        });
+        
+        console.log(`Sent hand to seat ${seat}: ${playerCards.length} cards`);
+      }
+
+      // Broadcast seat reassignment and bidding start messages
+      await broadcastToGame(apiGatewayClient, normalizedGameId, {
+        action: 'seatsRearranged',
+        players: rearrangedPlayers,
+        teams: teams,
+      });
+
+      // Broadcast bidding start message to all players
+      await broadcastToGame(apiGatewayClient, normalizedGameId, {
+        action: 'biddingStart',
+        startingPlayer: 0,
+        minBid: 50,
+      });
+
+      console.log('Sent WebSocket messages for seat rearrangement, deal and bidding start');
+    } catch (wsError) {
+      // Log but don't fail the request if WebSocket messaging fails
+      // This allows the game to continue even if WebSocket is unavailable
+      console.error('Error sending WebSocket messages:', wsError);
+      console.log('Game state updated successfully, but WebSocket messages failed');
+    }
+
+    // Fetch updated game state after dealing
+    const finalGame = await getGame(normalizedGameId);
+
     // Return success response
     return buildResponse(200, {
       success: true,
-      gameId: updatedGame.gameId,
-      teams: updatedGame.teams,
-      status: updatedGame.status,
-      players: updatedGame.players,
-      message: `Partner selected! Teams: Team 0 (${teams.team0.map(s => game.players.find(p => p.seat === s)?.name).join(' & ')}) vs Team 1 (${teams.team1.map(s => game.players.find(p => p.seat === s)?.name).join(' & ')})`,
+      gameId: finalGame.gameId,
+      teams: finalGame.teams,
+      status: finalGame.status,
+      players: finalGame.players,
+      message: `Partner selected and cards dealt! Teams: Team 0 (${teams.team0.map(s => game.players.find(p => p.seat === s)?.name).join(' & ')}) vs Team 1 (${teams.team1.map(s => game.players.find(p => p.seat === s)?.name).join(' & ')})`,
     });
 
   } catch (error) {
