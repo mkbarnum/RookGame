@@ -1,0 +1,30 @@
+{
+  "name": "rook-backend",
+  "version": "1.0.0",
+  "description": "AWS Lambda backend for Rook card game",
+  "main": "index.js",
+  "engines": {
+    "node": ">=18.0.0"
+  },
+  "scripts": {
+    "start": "DYNAMODB_ENDPOINT=http://localhost:8000 node local/server.js",
+    "setup-db": "DYNAMODB_ENDPOINT=http://localhost:8000 node local/setup-local-db.js",
+    "test": "echo \"Error: no test specified\" && exit 1"
+  },
+  "dependencies": {
+    "@aws-sdk/client-dynamodb": "^3.400.0",
+    "@aws-sdk/lib-dynamodb": "^3.400.0"
+  },
+  "devDependencies": {
+    "cors": "^2.8.5",
+    "express": "^4.22.1"
+  },
+  "keywords": [
+    "rook",
+    "card-game",
+    "lambda",
+    "aws"
+  ],
+  "author": "",
+  "license": "ISC"
+}

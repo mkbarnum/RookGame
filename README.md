@@ -169,65 +169,101 @@ rook/
 
 ### Prerequisites
 
-- **Node.js 18+** and npm
-- **AWS Account** with configured credentials
-- **AWS CLI** installed and configured
-- **AWS SAM CLI** (optional, for local Lambda testing)
+- **Node.js 18+** (v20 recommended) and npm
+- **Docker** - For running DynamoDB Local
+- **AWS Account** with configured credentials (for deployment only)
 
-### Frontend Setup
+### Quick Start - Local Development
+
+**One command to start everything:**
 
 ```bash
-# Navigate to frontend directory
+./start-local.sh
+```
+
+This will:
+1. Start DynamoDB Local (Docker)
+2. Create database tables
+3. Start the backend API server
+4. Start the frontend development server
+
+Services will be available at:
+- **Frontend:** http://localhost:3000
+- **Backend API:** http://localhost:3001
+- **DynamoDB Local:** http://localhost:8000
+
+Press `Ctrl+C` to stop all services.
+
+### Manual Setup
+
+#### Frontend Only
+
+```bash
 cd frontend
-
-# Install dependencies
 npm install
-
-# Start development server
 npm start
-
-# Build for production
-npm run build
 ```
 
 The frontend will be available at `http://localhost:3000`
 
-### Backend Setup (Coming Soon)
+#### Backend Only
 
 ```bash
-# Navigate to backend directory
+# 1. Start DynamoDB Local
 cd backend
+docker-compose up -d
 
-# Install dependencies
+# 2. Install dependencies
 npm install
 
-# Run local tests
-npm test
+# 3. Create database tables
+DYNAMODB_ENDPOINT=http://localhost:8000 node local/setup-local-db.js
 
-# Deploy to AWS (requires configured AWS credentials)
-sam build
-sam deploy --guided
+# 4. Start the server
+DYNAMODB_ENDPOINT=http://localhost:8000 node local/server.js
 ```
+
+The backend API will be available at `http://localhost:3001`
+
+### Testing the API
+
+```bash
+# Health check
+curl http://localhost:3001/health
+
+# Create a game
+curl -X POST http://localhost:3001/createGame \
+  -H "Content-Type: application/json" \
+  -d '{"hostName": "Alice"}'
+
+# Join a game
+curl -X POST http://localhost:3001/joinGame \
+  -H "Content-Type: application/json" \
+  -d '{"gameId": "GAMEID", "playerName": "Bob"}'
+
+# List all games (debug)
+curl http://localhost:3001/games
+```
+
+Or use the VS Code REST Client extension with `backend/api-tests.http`.
 
 ### Environment Variables
 
-Create a `.env` file in the frontend directory:
+For local development, no `.env` file is needed - defaults work out of the box.
 
-```env
-# API Configuration (update after backend deployment)
-REACT_APP_API_BASE_URL=https://your-api-gateway-url.amazonaws.com
-REACT_APP_WS_BASE_URL=wss://your-websocket-api-url.amazonaws.com/prod
+For production deployment, update `frontend/src/config.ts`:
+
+```typescript
+export const API_BASE_URL = 'https://your-api-gateway-url.amazonaws.com';
+export const WS_BASE_URL = 'wss://your-websocket-api-url.amazonaws.com/prod';
 ```
 
-### Local Testing with wscat
+### Troubleshooting
 
-```bash
-# Install wscat globally
-npm install -g wscat
-
-# Connect to WebSocket (after deployment)
-wscat -c "wss://YOUR_WS_API_URL/prod?gameId=ABC123&playerName=TestPlayer"
-```
+See `backend/README.md` for detailed troubleshooting steps including:
+- Node.js version issues
+- Docker/DynamoDB Local problems
+- Port conflicts
 
 ## 🚀 Deployment
 

@@ -1,0 +1,71 @@
+### Rook Backend - API Test Requests
+### Use with VS Code REST Client extension (humao.rest-client)
+
+### Variables
+@baseUrl = http://localhost:3001
+@gameId = YOUR_GAME_ID_HERE
+
+### ============================================
+### Health Check
+### ============================================
+
+GET {{baseUrl}}/health
+
+### ============================================
+### Create Game
+### ============================================
+
+# @name createGame
+POST {{baseUrl}}/createGame
+Content-Type: application/json
+
+{
+  "hostName": "Alice"
+}
+
+### ============================================
+### Join Game
+### ============================================
+### After creating a game, copy the gameId from the response
+### and paste it in the @gameId variable above, or use the
+### dynamic variable below
+
+# @name joinGame
+POST {{baseUrl}}/joinGame
+Content-Type: application/json
+
+{
+  "gameId": "{{gameId}}",
+  "playerName": "Bob"
+}
+
+### ============================================
+### Join Game (using response from createGame)
+### ============================================
+### This automatically uses the gameId from the last createGame call
+
+POST {{baseUrl}}/joinGame
+Content-Type: application/json
+
+{
+  "gameId": "{{createGame.response.body.gameId}}",
+  "playerName": "Charlie"
+}
+
+### ============================================
+### List All Games (Debug)
+### ============================================
+
+GET {{baseUrl}}/games
+
+### ============================================
+### Add More Players to Same Game
+### ============================================
+
+POST {{baseUrl}}/joinGame
+Content-Type: application/json
+
+{
+  "gameId": "{{createGame.response.body.gameId}}",
+  "playerName": "David"
+}
