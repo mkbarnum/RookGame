@@ -294,8 +294,22 @@ async function handler(event) {
 
     console.log(`All players connected. Proceeding with deal.`);
 
-    // Now deal the cards
-    const { hands, kitty } = await dealGame(normalizedGameId, updatedGame.version);
+    // For the first hand, dealer is seat 0 (host)
+    // Set dealer in game state if not already set
+    const firstDealer = 0;
+    if (updatedGame.dealer === null || updatedGame.dealer === undefined) {
+      await docClient.send(new UpdateCommand({
+        TableName: GAMES_TABLE,
+        Key: { gameId: normalizedGameId },
+        UpdateExpression: 'SET dealer = :dealer',
+        ExpressionAttributeValues: {
+          ':dealer': firstDealer,
+        },
+      }));
+    }
+
+    // Now deal the cards (first hand, dealer is 0)
+    const { hands, kitty } = await dealGame(normalizedGameId, updatedGame.version, firstDealer);
 
     // Send WebSocket messages to players
     try {
@@ -322,9 +336,11 @@ async function handler(event) {
       });
 
       // Broadcast bidding start message to all players
+      // For first hand, dealer is 0 (host), and dealer starts bidding
+      const firstHandStartingPlayer = firstDealer;
       await broadcastToGame(apiGatewayClient, normalizedGameId, {
         action: 'biddingStart',
-        startingPlayer: 0,
+        startingPlayer: firstHandStartingPlayer,
         minBid: 50,
       });
 

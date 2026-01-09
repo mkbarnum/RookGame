@@ -89,7 +89,7 @@ async function handler(event) {
     // - store new hands in HANDS_TABLE
     // - update game to BIDDING status
     // - set highBid/currentBid/currentBidder/passed/kitty/trumpColor
-    const { hands, kitty } = await dealGame(normalizedGameId, game.version);
+    const { hands, kitty } = await dealGame(normalizedGameId, game.version, currentDealer);
 
     // Send WebSocket messages to players (similar to choosePartner)
     try {
@@ -107,8 +107,8 @@ async function handler(event) {
       }
 
       // Broadcast bidding start message to all players.
-      // For new hands, bidding starts with the player to the left of the dealer.
-      const startingPlayer = (currentDealer + 1) % 4;
+      // Dealer starts the bidding.
+      const startingPlayer = currentDealer;
       await broadcastToGame(apiGatewayClient, normalizedGameId, {
         action: 'biddingStart',
         startingPlayer,

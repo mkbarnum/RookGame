@@ -475,7 +475,7 @@ async function completeHand(gameId, game) {
   /**
    * TESTING MODE SCORING:
    * - Single trick per hand (first trick ends the hand)
-   * - Team that wins the hand gets 165 points
+   * - Team that wins the hand gets 505 points (to test game end condition)
    * - Losing team gets 15 points
    *
    * "Winner of the hand" is determined by which team captured more points
@@ -489,7 +489,7 @@ async function completeHand(gameId, game) {
   }
 
   // Fixed test scores per hand
-  const WINNING_HAND_POINTS = 165;
+  const WINNING_HAND_POINTS = 505;
   const LOSING_HAND_POINTS = 15;
 
   let handScoreTeam0 = handWinnerTeam === 'team0' ? WINNING_HAND_POINTS : LOSING_HAND_POINTS;
@@ -499,9 +499,33 @@ async function completeHand(gameId, game) {
   let team0FinalScore = (game.teamScores?.team0 || 0) + handScoreTeam0;
   let team1FinalScore = (game.teamScores?.team1 || 0) + handScoreTeam1;
 
-  // Normal game over condition based on cumulative scores
-  const gameOver = team0FinalScore >= 500 || team1FinalScore >= 500;
-  const winner = gameOver ? (team0FinalScore >= 500 ? 'team0' : 'team1') : null;
+  // Determine game over condition:
+  // - If both teams >= 500, the team with the higher score wins
+  // - If tied at >= 500, game continues (no winner yet)
+  // - If only one team >= 500, that team wins
+  let gameOver = false;
+  let winner = null;
+
+  const team0Over500 = team0FinalScore >= 500;
+  const team1Over500 = team1FinalScore >= 500;
+
+  if (team0Over500 && team1Over500) {
+    // Both teams over 500 - highest score wins, unless tied
+    if (team0FinalScore > team1FinalScore) {
+      gameOver = true;
+      winner = 'team0';
+    } else if (team1FinalScore > team0FinalScore) {
+      gameOver = true;
+      winner = 'team1';
+    }
+    // If tied, game continues (gameOver stays false)
+  } else if (team0Over500) {
+    gameOver = true;
+    winner = 'team0';
+  } else if (team1Over500) {
+    gameOver = true;
+    winner = 'team1';
+  }
 
   // Get or initialize hand history
   const handHistory = game.handHistory || [];
@@ -535,20 +559,10 @@ async function completeHand(gameId, game) {
   });
 
   // Update game state with final scores and hand history
-  await docClient.send(new UpdateCommand({
+  // If game is over, also set status to FINISHED
+  const updateParams = {
     TableName: GAMES_TABLE,
     Key: { gameId },
-    // Set the entire teamScores map in one go to avoid invalid nested
-    // document path errors if teamScores doesn't exist yet.
-    UpdateExpression: `
-      SET teamScores = :teamScores,
-          handHistory = :handHistory,
-          pointsCaptured = :resetPoints,
-          dealer = :dealer,
-          currentRound = :currentRound,
-          version = version + :one,
-          updatedAt = :updatedAt
-    `,
     ExpressionAttributeValues: {
       ':teamScores': {
         team0: team0FinalScore,
@@ -563,7 +577,34 @@ async function completeHand(gameId, game) {
       ':currentVersion': game.version,
     },
     ConditionExpression: 'version = :currentVersion',
-  }));
+  };
+
+  if (gameOver) {
+    updateParams.UpdateExpression = `
+      SET teamScores = :teamScores,
+          handHistory = :handHistory,
+          pointsCaptured = :resetPoints,
+          dealer = :dealer,
+          currentRound = :currentRound,
+          #status = :status,
+          version = version + :one,
+          updatedAt = :updatedAt
+    `;
+    updateParams.ExpressionAttributeNames = { '#status': 'status' };
+    updateParams.ExpressionAttributeValues[':status'] = GameStatus.FINISHED;
+  } else {
+    updateParams.UpdateExpression = `
+      SET teamScores = :teamScores,
+          handHistory = :handHistory,
+          pointsCaptured = :resetPoints,
+          dealer = :dealer,
+          currentRound = :currentRound,
+          version = version + :one,
+          updatedAt = :updatedAt
+    `;
+  }
+
+  await docClient.send(new UpdateCommand(updateParams));
 
   // Broadcast hand complete
   const localClient = global.localWebSocketClient;

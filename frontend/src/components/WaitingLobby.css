@@ -1,1 +1,62 @@
-/* WaitingLobby component styles - extracted from GamePage.css */
+/* Back button styles */
+.back-button {
+  position: absolute;
+  top: 1rem;
+  left: 1rem;
+  width: 40px;
+  height: 40px;
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  background: transparent;
+  border: none;
+  color: #808080;
+  cursor: pointer;
+  transition: color 0.2s ease;
+  z-index: 10;
+  -webkit-tap-highlight-color: transparent;
+  padding: 0;
+}
+
+.back-button:hover {
+  color: #a0a0a0;
+}
+
+.back-button:active {
+  color: #606060;
+}
+
+.back-button svg {
+  width: 20px;
+  height: 20px;
+}
+
+/* Responsive adjustments */
+@media (min-width: 768px) {
+  .back-button {
+    top: 1.5rem;
+    left: 1.5rem;
+    width: 44px;
+    height: 44px;
+  }
+
+  .back-button svg {
+    width: 22px;
+    height: 22px;
+  }
+}
+
+/* Settings button in waiting lobby */
+.waiting-lobby-settings-btn {
+  position: absolute;
+  top: 1rem;
+  right: 1rem;
+  z-index: 10;
+}
+
+@media (min-width: 768px) {
+  .waiting-lobby-settings-btn {
+    top: 1.5rem;
+    right: 1.5rem;
+  }
+}

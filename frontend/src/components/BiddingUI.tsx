@@ -1,5 +1,5 @@
 import React, { useState, useEffect, useCallback } from 'react';
-import { Player, BiddingState } from '../types/game';
+import { Player } from '../types/game';
 import './BiddingUI.css';
 
 interface BiddingUIProps {
@@ -85,7 +85,7 @@ export const BiddingUI: React.FC<BiddingUIProps> = ({
           <span>Current Bid: <strong>{highBid || minBid}</strong></span>
           {currentBidder !== null && (
             <span className="current-bidder">
-              {isMyTurn ? 'Your turn' : (() => {
+              {isMyTurn ? '' : (() => {
                 const bidderPlayer = players.find(p => p.seat === currentBidder);
                 return `${bidderPlayer?.name || `Player ${currentBidder + 1}`}'s turn`;
               })()}

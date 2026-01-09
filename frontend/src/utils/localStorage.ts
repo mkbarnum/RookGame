@@ -1,6 +1,8 @@
 // Utility functions for localStorage operations
 import { GameState, Player } from '../types/game';
 
+export type CardSortMethod = 'left-to-right' | 'left-to-right-goofy' | 'right-to-left';
+
 export const localStorageUtils = {
   /**
    * Save game state to localStorage
@@ -34,5 +36,23 @@ export const localStorageUtils = {
       isHost: isHost === 'true',
       players: players ? JSON.parse(players) : [],
     };
+  },
+
+  /**
+   * Save card sort method preference
+   */
+  saveCardSortMethod(method: CardSortMethod): void {
+    localStorage.setItem('rook_cardSortMethod', method);
+  },
+
+  /**
+   * Get card sort method preference (defaults to 'left-to-right')
+   */
+  getCardSortMethod(): CardSortMethod {
+    const method = localStorage.getItem('rook_cardSortMethod');
+    if (method === 'left-to-right' || method === 'left-to-right-goofy' || method === 'right-to-left') {
+      return method;
+    }
+    return 'left-to-right';
   },
 };

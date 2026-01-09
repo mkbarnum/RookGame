@@ -1,0 +1,266 @@
+/* ===== Card Fan Container ===== */
+.card-fan-container {
+  width: 100%;
+  position: relative;
+  touch-action: pan-y;
+  user-select: none;
+  -webkit-user-select: none;
+  padding: 0;
+  overflow: visible;
+}
+
+.card-fan-container.dragging {
+  cursor: grabbing;
+}
+
+/* ===== Card Fan Layout ===== */
+.card-fan {
+  display: flex;
+  justify-content: center;
+  align-items: flex-end;
+  position: relative;
+  height: 100px;
+  width: 100%;
+  perspective: 1000px;
+  transform-style: preserve-3d;
+}
+
+/* ===== Individual Card Slot ===== */
+.card-fan-slot {
+  position: absolute;
+  bottom: 0;
+  left: 50%;
+  transform-origin: center 150%;
+  transform: 
+    translateX(-50%)
+    translateX(var(--x-offset, 0px))
+    translateY(var(--y-offset, 0px))
+    translateY(var(--lift, 0px))
+    rotate(var(--rotation, 0deg))
+    scale(var(--scale, 1));
+  z-index: var(--z-index, 1);
+  transition: 
+    transform 0.25s cubic-bezier(0.34, 1.56, 0.64, 1),
+    z-index 0.1s ease;
+  cursor: pointer;
+  -webkit-tap-highlight-color: transparent;
+}
+
+/* When dragging, reduce transition for snappier feel */
+.card-fan-container.dragging .card-fan-slot {
+  transition: 
+    transform 0.1s ease-out,
+    z-index 0.05s ease;
+}
+
+/* ===== Focused Card State ===== */
+.card-fan-slot.focused {
+  filter: drop-shadow(0 6px 12px rgba(0, 0, 0, 0.4));
+}
+
+.card-fan-slot.focused .card {
+  box-shadow: 
+    0 8px 20px rgba(0, 0, 0, 0.5),
+    0 0 0 2px rgba(255, 200, 87, 0.5),
+    inset 0 1px 0 rgba(255, 255, 255, 0.5);
+}
+
+/* ===== Not Playable State ===== */
+.card-fan-slot.not-playable .card {
+  cursor: not-allowed;
+}
+
+/* ===== Dragging State ===== */
+.card-fan-slot.dragging {
+  opacity: 0.5;
+  transform:
+    translateX(-50%)
+    translateX(var(--x-offset, 0px))
+    translateY(var(--y-offset, 0px))
+    rotate(var(--rotation, 0deg))
+    scale(1.1);
+}
+
+/* Touch drag clone - card that follows finger */
+.card-touch-drag-clone {
+  position: fixed !important;
+  z-index: 9999 !important;
+  pointer-events: none;
+  transform-origin: center center;
+  transition: none !important;
+}
+
+.card-fan-slot[draggable="true"] {
+  cursor: grab;
+}
+
+.card-fan-slot[draggable="true"]:active {
+  cursor: grabbing;
+}
+
+/* ===== Cards within fan slots ===== */
+.card-fan-slot .card {
+  width: 52px;
+  height: 72px;
+  transition: 
+    box-shadow 0.2s ease,
+    transform 0.15s ease;
+}
+
+/* Override card active state within fan */
+.card-fan-slot .card:active {
+  transform: none;
+}
+
+/* ===== Play Hint ===== */
+.play-hint {
+  position: absolute;
+  bottom: -20px;
+  left: 50%;
+  transform: translateX(-50%);
+  font-size: 0.7rem;
+  color: rgba(255, 200, 87, 0.8);
+  text-transform: uppercase;
+  letter-spacing: 0.1em;
+  font-weight: 600;
+  white-space: nowrap;
+  animation: hint-pulse 2s ease-in-out infinite;
+  pointer-events: none;
+}
+
+@keyframes hint-pulse {
+  0%, 100% {
+    opacity: 0.8;
+  }
+  50% {
+    opacity: 0.4;
+  }
+}
+
+/* ===== Empty State ===== */
+.card-fan-empty {
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  padding: 2rem;
+  color: #6b7280;
+  font-size: 0.9rem;
+  text-align: center;
+}
+
+.card-fan-empty p {
+  margin: 0;
+}
+
+/* ===== Responsive: Larger Phones (390px+) ===== */
+@media (min-width: 390px) {
+  .card-fan {
+    height: 110px;
+  }
+
+  .card-fan-slot .card {
+    width: 56px;
+    height: 78px;
+  }
+  
+  .play-hint {
+    bottom: -20px;
+    font-size: 0.75rem;
+  }
+}
+
+/* ===== Responsive: Small Tablets (600px+) ===== */
+@media (min-width: 600px) {
+  .card-fan {
+    height: 120px;
+  }
+
+  .card-fan-slot .card {
+    width: 62px;
+    height: 86px;
+  }
+}
+
+/* ===== Responsive: Tablets (768px+) ===== */
+@media (min-width: 768px) {
+  .card-fan {
+    height: 140px;
+  }
+
+  .card-fan-slot .card {
+    width: 70px;
+    height: 98px;
+  }
+
+  .card-fan-slot:hover:not(.not-playable) {
+    filter: drop-shadow(0 8px 15px rgba(0, 0, 0, 0.4));
+  }
+
+  .card-fan-slot:hover:not(.not-playable) .card {
+    box-shadow: 
+      0 10px 25px rgba(0, 0, 0, 0.5),
+      0 0 0 2px rgba(255, 200, 87, 0.5),
+      inset 0 1px 0 rgba(255, 255, 255, 0.5);
+  }
+  
+  .play-hint {
+    bottom: -24px;
+    font-size: 0.8rem;
+  }
+}
+
+/* ===== Responsive: Desktop (1024px+) ===== */
+@media (min-width: 1024px) {
+  .card-fan {
+    height: 160px;
+  }
+
+  .card-fan-slot .card {
+    width: 80px;
+    height: 112px;
+  }
+
+  .card-fan-slot {
+    transform-origin: center 150%;
+  }
+  
+  .play-hint {
+    bottom: -28px;
+    font-size: 0.85rem;
+  }
+}
+
+/* ===== Landscape Mode ===== */
+@media (max-height: 500px) and (orientation: landscape) {
+  .card-fan {
+    height: 80px;
+  }
+
+  .card-fan-slot .card {
+    width: 44px;
+    height: 62px;
+  }
+
+  .card-fan-slot {
+    transform-origin: center 120%;
+  }
+  
+  .play-hint {
+    bottom: -14px;
+    font-size: 0.65rem;
+  }
+}
+
+/* ===== Touch Feedback ===== */
+@media (hover: none) and (pointer: coarse) {
+  .card-fan-slot:active:not(.not-playable) {
+    filter: drop-shadow(0 6px 12px rgba(0, 0, 0, 0.4));
+  }
+  
+  .card-fan-slot:active:not(.not-playable) .card {
+    box-shadow: 
+      0 8px 20px rgba(0, 0, 0, 0.5),
+      0 0 0 2px rgba(255, 200, 87, 0.5),
+      inset 0 1px 0 rgba(255, 255, 255, 0.5);
+  }
+}

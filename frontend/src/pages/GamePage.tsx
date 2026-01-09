@@ -1,8 +1,8 @@
-import React, { useState, useEffect } from 'react';
+import React, { useState, useRef } from 'react';
 import { Card as CardType, TrickWonNotification } from '../types/game';
 import { useGameState, useWebSocket } from '../hooks';
 import {
-  Card,
+  CardFan,
   PlayerInfo,
   TrickArea,
   KittyDisplay,
@@ -10,10 +10,14 @@ import {
   WaitingLobby,
   BiddingUI,
   TrickWonNotification as TrickWonNotificationComponent,
+  RookOverlay,
+  SettingsModal,
+  CardSortMethod,
 } from '../components';
 import { ScoresModal } from '../components/ScoresModal';
 import { sortCards, isCardPlayable, cardToString, parseCard } from '../utils/cardUtils';
 import { getAbsoluteSeat, isMyPartner } from '../utils/seatUtils';
+import { localStorageUtils } from '../utils/localStorage';
 import { API_BASE_URL } from '../config';
 import './GamePage.css';
 
@@ -32,8 +36,19 @@ const GamePage: React.FC = () => {
   const [trickWonNotification, setTrickWonNotification] = useState<TrickWonNotification | null>(null);
   const [showScoresModal, setShowScoresModal] = useState(false);
   const [handHistory, setHandHistory] = useState<any[]>([]);
+  const [gameWinner, setGameWinner] = useState<'team0' | 'team1' | null>(null);
+  const [kittyCardStrings, setKittyCardStrings] = useState<Set<string>>(new Set());
+  const [showRookOverlay, setShowRookOverlay] = useState(false);
+  const rookOverlayTimeoutRef = useRef<NodeJS.Timeout | null>(null);
+  const [showSettings, setShowSettings] = useState(false);
+  const [cardSortMethod, setCardSortMethod] = useState<CardSortMethod>(() => localStorageUtils.getCardSortMethod());
 
-  const sortedHand = sortCards(playerHand);
+  const handleCardSortMethodChange = (method: CardSortMethod) => {
+    setCardSortMethod(method);
+    localStorageUtils.saveCardSortMethod(method);
+  };
+
+  const sortedHand = sortCards(playerHand, cardSortMethod);
 
   // Determine which team is "You + Partner" for scores display
   const myTeam = gameState.teams?.team0.includes(gameState.seat) ? 'team0' : 'team1';
@@ -48,7 +63,7 @@ const GamePage: React.FC = () => {
     gameState.status === 'TRUMP_SELECTION' && gameState.bidWinner === gameState.seat;
 
   // WebSocket handlers
-  const { sendMessage, connected: wsConnected } = useWebSocket({
+  const { sendMessage } = useWebSocket({
     gameState,
     onDeal: (cards) => {
       setPlayerHand(cards);
@@ -101,6 +116,10 @@ const GamePage: React.FC = () => {
       console.log(`Next bidder: seat ${seat}`);
     },
     onKitty: (kittyCards) => {
+      // Track kitty card strings for display purposes
+      const kittyStrings = new Set(kittyCards.map((c: CardType) => cardToString(c)));
+      setKittyCardStrings(kittyStrings);
+      
       setPlayerHand((prev) => {
         const currentCardCount = prev.length;
         if (currentCardCount >= 18) {
@@ -148,6 +167,21 @@ const GamePage: React.FC = () => {
     onCardPlayed: (seat, cardString) => {
       console.log(`Player ${seat} played card ${cardString}`);
       const playedCard = parseCard(cardString);
+      
+      // Show rook overlay if Rook card was played
+      if (cardString === 'Rook') {
+        console.log(`🦅 Rook card played by seat ${seat} - showing overlay for all players`);
+        // Clear any existing timeout
+        if (rookOverlayTimeoutRef.current) {
+          clearTimeout(rookOverlayTimeoutRef.current);
+        }
+        setShowRookOverlay(true);
+        rookOverlayTimeoutRef.current = setTimeout(() => {
+          setShowRookOverlay(false);
+          rookOverlayTimeoutRef.current = null;
+        }, 2000);
+      }
+      
       setCurrentTrick((prev) => {
         const newTrick = [...prev, { seat, card: playedCard }];
         // If this is the first card of the trick, update ledSuit
@@ -207,12 +241,50 @@ const GamePage: React.FC = () => {
         ...prev,
         status: 'FINISHED',
       }));
+      // Save the winner
+      if (message.winner) {
+        setGameWinner(message.winner);
+      }
       // Show scores modal when game is over
       // Use handHistory from state if available, otherwise from message
       if (gameState.handHistory && gameState.handHistory.length > 0) {
         setHandHistory(gameState.handHistory);
       }
       setShowScoresModal(true);
+    },
+    onGameReset: (message) => {
+      console.log('Game reset:', message);
+      // Reset all local game state
+      setPlayerHand([]);
+      setCurrentTrick([]);
+      setTrickWonNotification(null);
+      setShowScoresModal(false);
+      setHandHistory([]);
+      setGameWinner(null);
+      setShowRookOverlay(false);
+      if (rookOverlayTimeoutRef.current) {
+        clearTimeout(rookOverlayTimeoutRef.current);
+        rookOverlayTimeoutRef.current = null;
+      }
+      setBiddingState({
+        highBid: null,
+        currentBidder: null,
+        minBid: 50,
+      });
+      // Update game state to show lobby
+      setGameState((prev) => ({
+        ...prev,
+        status: message.status || 'FULL',
+        teams: null,
+        trump: undefined,
+        currentPlayer: undefined,
+        bidWinner: undefined,
+        winningBid: undefined,
+        ledSuit: undefined,
+        teamScores: { team0: 0, team1: 0 },
+        handHistory: [],
+        dealer: undefined,
+      }));
     },
     onError: (action, message) => {
       console.error(`${action} error:`, message);
@@ -240,7 +312,7 @@ const GamePage: React.FC = () => {
         <div className="game-status">
           <div className="game-stats-row">
             <span className="stat">
-              Your Team: <strong>{myTeamScore}</strong>
+              You: <strong>{myTeamScore}</strong>
             </span>
             <span className="stat">
               Opponents: <strong>{opponentTeamScore}</strong>
@@ -249,13 +321,20 @@ const GamePage: React.FC = () => {
               Bid: <strong>{gameState.winningBid || '--'}</strong>
             </span>
             <span className="stat">
-              Trump: <strong>{gameState.trump || '--'}</strong>
-            </span>
-            <span className="stat">
-              Kitty: <strong>{gameState.bidWinner !== undefined && gameState.players ? gameState.players.find((p) => p.seat === gameState.bidWinner)?.name || 'Unknown' : '--'}</strong>
+              Kitty: <strong>{gameState.bidWinner !== undefined && gameState.players ? gameState.players.find((p) => p.seat === gameState.bidWinner)?.name || '--' : '--'}</strong>
             </span>
           </div>
         </div>
+        <button
+          className="settings-btn"
+          onClick={() => setShowSettings(true)}
+          aria-label="Settings"
+        >
+          <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round">
+            <circle cx="12" cy="12" r="3" />
+            <path d="M19.4 15a1.65 1.65 0 0 0 .33 1.82l.06.06a2 2 0 0 1 0 2.83 2 2 0 0 1-2.83 0l-.06-.06a1.65 1.65 0 0 0-1.82-.33 1.65 1.65 0 0 0-1 1.51V21a2 2 0 0 1-2 2 2 2 0 0 1-2-2v-.09A1.65 1.65 0 0 0 9 19.4a1.65 1.65 0 0 0-1.82.33l-.06.06a2 2 0 0 1-2.83 0 2 2 0 0 1 0-2.83l.06-.06a1.65 1.65 0 0 0 .33-1.82 1.65 1.65 0 0 0-1.51-1H3a2 2 0 0 1-2-2 2 2 0 0 1 2-2h.09A1.65 1.65 0 0 0 4.6 9a1.65 1.65 0 0 0-.33-1.82l-.06-.06a2 2 0 0 1 0-2.83 2 2 0 0 1 2.83 0l.06.06a1.65 1.65 0 0 0 1.82.33H9a1.65 1.65 0 0 0 1-1.51V3a2 2 0 0 1 2-2 2 2 0 0 1 2 2v.09a1.65 1.65 0 0 0 1 1.51 1.65 1.65 0 0 0 1.82-.33l.06-.06a2 2 0 0 1 2.83 0 2 2 0 0 1 0 2.83l-.06.06a1.65 1.65 0 0 0-.33 1.82V9a1.65 1.65 0 0 0 1.51 1H21a2 2 0 0 1 2 2 2 2 0 0 1-2 2h-.09a1.65 1.65 0 0 0-1.51 1z" />
+          </svg>
+        </button>
       </header>
 
       <main className="game-table">
@@ -337,6 +416,7 @@ const GamePage: React.FC = () => {
             ) : gameState.status === 'TRUMP_SELECTION' && gameState.bidWinner === gameState.seat ? (
               <DiscardUI
                 hand={sortedHand}
+                kittyCardStrings={kittyCardStrings}
                 onConfirm={(discardCards, trump) => {
                   sendMessage({
                     action: 'discardAndTrump',
@@ -368,14 +448,36 @@ const GamePage: React.FC = () => {
               </div>
             ) : gameState.status === 'PLAYING' ? (
               <>
-                <TrickArea currentTrick={currentTrick} mySeat={gameState.seat} />
+                <TrickArea 
+                  currentTrick={currentTrick} 
+                  mySeat={gameState.seat} 
+                  trump={gameState.trump}
+                  canDrop={gameState.currentPlayer === gameState.seat}
+                  onCardDrop={(card) => {
+                    // Check if it's my turn and card is playable
+                    if (gameState.currentPlayer !== gameState.seat) return;
+                    if (!isCardPlayable(card, sortedHand, gameState.ledSuit, gameState.trump)) return;
+                    
+                    const cardString = cardToString(card);
+                    sendMessage({
+                      action: 'playCard',
+                      card: cardString,
+                    });
+                    console.log('Dropped and played card:', cardString);
+
+                    // Immediately remove card from hand UI
+                    setPlayerHand((prev) =>
+                      prev.filter((c) => !(c.color === card.color && c.rank === card.rank))
+                    );
+                  }}
+                />
                 {trickWonNotification && (
                   <TrickWonNotificationComponent notification={trickWonNotification} players={gameState.players} />
                 )}
               </>
             ) : (
               <>
-                <TrickArea currentTrick={currentTrick} mySeat={gameState.seat} />
+                <TrickArea currentTrick={currentTrick} mySeat={gameState.seat} trump={gameState.trump} />
                 <KittyDisplay cardCount={5} />
                 {trickWonNotification && (
                   <TrickWonNotificationComponent notification={trickWonNotification} players={gameState.players} />
@@ -405,7 +507,14 @@ const GamePage: React.FC = () => {
 
         {/* Bottom: local player's hand */}
         <section className="table-section table-bottom">
-          <div className="local-player">
+          <div
+            className={`local-player ${
+              (gameState.status === 'BIDDING' && biddingState.currentBidder === gameState.seat) ||
+              (gameState.status === 'PLAYING' && gameState.currentPlayer === gameState.seat)
+                ? 'current-turn'
+                : ''
+            }`}
+          >
             <div className="local-player-header">
               <div
                 className={`local-player-info ${
@@ -421,55 +530,38 @@ const GamePage: React.FC = () => {
               </div>
             </div>
             <div className="hand-container">
-              <div className="hand-scroll">
-                {sortedHand.length > 0 ? (
-                  sortedHand.map((card, index) => {
-                    const isPlayable = isCardPlayable(card, sortedHand, gameState.ledSuit, gameState.trump);
-                    const isTurn = gameState.status === 'PLAYING' && gameState.currentPlayer === gameState.seat;
-                    return (
-                      <Card
-                        key={`${card.color}-${card.rank}-${index}`}
-                        card={card}
-                        onDoubleClick={() => {
-                          const cardString = cardToString(card);
-                          sendMessage({
-                            action: 'playCard',
-                            card: cardString,
-                          });
-                          console.log('Sent playCard:', cardString);
+              <CardFan
+                cards={sortedHand}
+                onCardPlay={(card) => {
+                  const cardString = cardToString(card);
+                  sendMessage({
+                    action: 'playCard',
+                    card: cardString,
+                  });
+                  console.log('Sent playCard:', cardString);
 
-                          // Immediately remove card from hand UI
-                          setPlayerHand((prev) =>
-                            prev.filter((c) => !(c.color === card.color && c.rank === card.rank))
-                          );
-                        }}
-                        disabled={!isTurn || !isPlayable}
-                      />
-                    );
-                  })
-                ) : (
-                  <div className="hand-empty">
-                    <p>Waiting for cards to be dealt...</p>
-                  </div>
-                )}
-              </div>
+                  // Immediately remove card from hand UI
+                  setPlayerHand((prev) =>
+                    prev.filter((c) => !(c.color === card.color && c.rank === card.rank))
+                  );
+                }}
+                isCardPlayable={(card) => isCardPlayable(card, sortedHand, gameState.ledSuit, gameState.trump)}
+                isMyTurn={gameState.status === 'PLAYING' && gameState.currentPlayer === gameState.seat}
+              />
             </div>
           </div>
         </section>
       </main>
+      <RookOverlay show={showRookOverlay} />
       {showScoresModal && gameState.teams && handHistory.length > 0 && (
         <ScoresModal
           handHistory={handHistory}
           teams={gameState.teams}
           mySeat={gameState.seat}
           isDealer={gameState.dealer === gameState.seat}
-          isGameOver={
-            (() => {
-              const last = handHistory[handHistory.length - 1];
-              if (!last) return false;
-              return last.team0Total >= 500 || last.team1Total >= 500;
-            })()
-          }
+          isGameOver={gameWinner !== null}
+          isHost={gameState.seat === 0 || gameState.isHost === true}
+          winner={gameWinner}
           onDealNextHand={async () => {
             try {
               const response = await fetch(`${API_BASE_URL}/startNextHand`, {
@@ -495,9 +587,39 @@ const GamePage: React.FC = () => {
               alert('Error starting next hand. Please try again.');
             }
           }}
+          onBackToLobby={async () => {
+            try {
+              const response = await fetch(`${API_BASE_URL}/resetGame`, {
+                method: 'POST',
+                headers: {
+                  'Content-Type': 'application/json',
+                },
+                body: JSON.stringify({
+                  gameId: gameState.gameId,
+                }),
+              });
+              const data = await response.json();
+              if (!response.ok || !data.success) {
+                console.error('Failed to reset game:', data);
+                alert(data.message || 'Failed to reset game');
+                return;
+              }
+              // The gameReset WebSocket message will handle resetting local state
+              console.log('Game reset successfully');
+            } catch (error) {
+              console.error('Error resetting game:', error);
+              alert('Error resetting game. Please try again.');
+            }
+          }}
           onClose={() => setShowScoresModal(false)}
         />
       )}
+      <SettingsModal
+        isOpen={showSettings}
+        onClose={() => setShowSettings(false)}
+        cardSortMethod={cardSortMethod}
+        onCardSortMethodChange={handleCardSortMethodChange}
+      />
     </div>
   );
 };

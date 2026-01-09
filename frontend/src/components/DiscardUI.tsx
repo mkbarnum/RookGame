@@ -6,15 +6,16 @@ import './DiscardUI.css';
 
 interface DiscardUIProps {
   hand: CardType[];
+  kittyCardStrings: Set<string>;
   onConfirm: (discardCards: string[], trump: string) => void;
   disabled?: boolean;
 }
 
-export const DiscardUI: React.FC<DiscardUIProps> = ({ hand, onConfirm, disabled = false }) => {
+export const DiscardUI: React.FC<DiscardUIProps> = ({ hand, kittyCardStrings, onConfirm, disabled = false }) => {
   const [selectedCards, setSelectedCards] = useState<Set<string>>(new Set());
   const [selectedTrump, setSelectedTrump] = useState<string>('');
+  const [showTrumpModal, setShowTrumpModal] = useState<boolean>(false);
 
-  const suits = ['Red', 'Green', 'Yellow', 'Black'];
 
   // Reset selections if hand changes (e.g., when kitty cards are added)
   useEffect(() => {
@@ -45,6 +46,11 @@ export const DiscardUI: React.FC<DiscardUIProps> = ({ hand, onConfirm, disabled 
     }
   };
 
+  const handleTrumpSelect = (trump: string) => {
+    setSelectedTrump(trump);
+    setShowTrumpModal(false);
+  };
+
   const isConfirmEnabled = selectedCards.size === 5 && selectedTrump && !disabled && hand.length >= 18;
 
   return (
@@ -54,17 +60,48 @@ export const DiscardUI: React.FC<DiscardUIProps> = ({ hand, onConfirm, disabled 
       </div>
 
       <div className="trump-selection">
-        <select
-          value={selectedTrump}
-          onChange={(e) => setSelectedTrump(e.target.value)}
+        <button
+          type="button"
+          className={`trump-select-btn ${selectedTrump ? `trump-selected trump-${selectedTrump.toLowerCase()}` : ''}`}
+          onClick={() => setShowTrumpModal(true)}
           disabled={disabled || hand.length < 18}
         >
-          <option value="">Choose Trump</option>
-          {suits.map(suit => (
-            <option key={suit} value={suit}>{suit}</option>
-          ))}
-        </select>
+          {selectedTrump ? '' : 'Choose Trump'}
+        </button>
       </div>
+
+      {showTrumpModal && (
+        <div className="trump-modal-overlay" onClick={() => setShowTrumpModal(false)}>
+          <div className="trump-modal" onClick={(e) => e.stopPropagation()}>
+            <div className="trump-color-grid">
+              <button
+                type="button"
+                className="trump-color-btn red"
+                onClick={() => handleTrumpSelect('Red')}
+              >
+              </button>
+              <button
+                type="button"
+                className="trump-color-btn yellow"
+                onClick={() => handleTrumpSelect('Yellow')}
+              >
+              </button>
+              <button
+                type="button"
+                className="trump-color-btn green"
+                onClick={() => handleTrumpSelect('Green')}
+              >
+              </button>
+              <button
+                type="button"
+                className="trump-color-btn black"
+                onClick={() => handleTrumpSelect('Black')}
+              >
+              </button>
+            </div>
+          </div>
+        </div>
+      )}
 
       <div className="discard-selection">
         <div className="selection-info">
@@ -76,11 +113,13 @@ export const DiscardUI: React.FC<DiscardUIProps> = ({ hand, onConfirm, disabled 
           {hand.map((card, index) => {
             const cardString = cardToString(card);
             const selected = isCardSelected(card);
+            const isFromKitty = kittyCardStrings.has(cardString);
             return (
               <Card
                 key={`${cardString}-${index}`}
                 card={card}
                 selected={selected}
+                isKittyCard={isFromKitty}
                 onClick={() => !disabled && hand.length >= 18 && toggleCardSelection(card)}
               />
             );

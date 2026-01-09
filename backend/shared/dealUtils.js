@@ -103,9 +103,10 @@ async function storeHands(gameId, hands) {
  * Deal cards and update game state
  * @param {string} gameId - Game ID
  * @param {number} currentVersion - Current game version for optimistic locking
+ * @param {number} dealer - Seat of the dealer (defaults to 0 for first hand)
  * @returns {Promise<object>} Object with hands and kitty
  */
-async function dealGame(gameId, currentVersion) {
+async function dealGame(gameId, currentVersion, dealer = 0) {
   // Construct and shuffle deck
   const deck = constructDeck();
   const shuffled = shuffleDeck(deck);
@@ -115,6 +116,9 @@ async function dealGame(gameId, currentVersion) {
   
   // Store hands in DynamoDB
   await storeHands(gameId, hands);
+  
+  // Calculate starting bidder: dealer starts the bidding
+  const startingBidder = dealer;
   
   // Update game state
   const { UpdateCommand } = require('@aws-sdk/lib-dynamodb');
@@ -139,7 +143,7 @@ async function dealGame(gameId, currentVersion) {
       ':status': GameStatus.BIDDING,
       ':highBid': 0, // No bid yet
       ':currentBid': BID_MIN, // Starting bid is minimum (for display)
-      ':currentBidder': 0, // Host (seat 0) starts bidding
+      ':currentBidder': startingBidder, // Player to the left of dealer starts bidding
       ':passed': [],
       ':kitty': kitty,
       ':trumpColor': null,
@@ -150,7 +154,7 @@ async function dealGame(gameId, currentVersion) {
     ConditionExpression: 'version = :currentVersion',
   }));
 
-  console.log(`Dealt cards for game ${gameId}. Hands: ${Object.values(hands).map(h => h.length).join(', ')}, Kitty: ${kitty.length}`);
+  console.log(`Dealt cards for game ${gameId}. Dealer: ${dealer}, Starting bidder: ${startingBidder}. Hands: ${Object.values(hands).map(h => h.length).join(', ')}, Kitty: ${kitty.length}`);
 
   return { hands, kitty };
 }

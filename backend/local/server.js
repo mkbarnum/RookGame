@@ -168,7 +168,11 @@ async function handleDiscardAndTrump(connectionInfo, message) {
       },
     }));
 
-    // Update game state: set trump, status to PLAYING, currentPlayer to 1
+    // Calculate first trick leader: player to the left of dealer
+    const dealer = typeof game.dealer === 'number' ? game.dealer : 0;
+    const firstTrickLeader = (dealer + 1) % 4;
+
+    // Update game state: set trump, status to PLAYING, currentPlayer to first trick leader
     await docClient.send(new UpdateCommand({
       TableName: GAMES_TABLE,
       Key: { gameId },
@@ -185,7 +189,7 @@ async function handleDiscardAndTrump(connectionInfo, message) {
       ExpressionAttributeValues: {
         ':trump': trump,
         ':status': GameStatus.PLAYING,
-        ':currentPlayer': 1, // Player to the left of dealer (seat 0) leads
+        ':currentPlayer': firstTrickLeader, // Player to the left of dealer leads first trick
         ':one': 1,
         ':updatedAt': new Date().toISOString(),
         ':currentVersion': game.version,
@@ -193,7 +197,7 @@ async function handleDiscardAndTrump(connectionInfo, message) {
       ConditionExpression: 'version = :currentVersion',
     }));
 
-    console.log(`Player ${playerSeat} discarded 5 cards and chose ${trump} as trump`);
+    console.log(`Player ${playerSeat} discarded 5 cards and chose ${trump} as trump. Dealer: ${dealer}, First trick leader: ${firstTrickLeader}`);
 
     // Broadcast trump chosen and play start to all players
     const localClient = global.localWebSocketClient;
@@ -205,7 +209,7 @@ async function handleDiscardAndTrump(connectionInfo, message) {
 
       await localClient.broadcastToGame(gameId, {
         action: 'playStart',
-        leader: 1,
+        leader: firstTrickLeader,
       });
     }
 
@@ -687,12 +691,16 @@ function wrapLambdaHandler(handler) {
   };
 }
 
+// Import resetGame handler
+const resetGame = require('../handlers/resetGame').handler;
+
 // Routes
 app.post('/createGame', wrapLambdaHandler(createGame));
 app.post('/joinGame', wrapLambdaHandler(joinGame));
 app.post('/choosePartner', wrapLambdaHandler(choosePartner));
 app.post('/gameAction', wrapLambdaHandler(gameAction));
 app.post('/startNextHand', wrapLambdaHandler(startNextHand));
+app.post('/resetGame', wrapLambdaHandler(resetGame));
 
 // Health check
 app.get('/health', (req, res) => {

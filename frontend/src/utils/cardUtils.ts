@@ -2,6 +2,8 @@
 
 import { Card } from '../types/game';
 
+export type CardSortMethod = 'left-to-right' | 'left-to-right-goofy' | 'right-to-left';
+
 /**
  * Parse a card string (e.g., "Green14", "Rook") into a Card object
  */
@@ -34,9 +36,14 @@ export function cardToString(card: Card): string {
 }
 
 /**
- * Sort cards: group by color, within each color sort by rank (1 is highest)
+ * Sort cards based on the specified sort method
+ * 
+ * Sort methods:
+ * - 'left-to-right': 2 → 14, then 1 (Ace high) - default Rook ordering
+ * - 'left-to-right-goofy': 1 → 14 (simple numeric order)
+ * - 'right-to-left': 1 ← 2 (high cards on right, reversed)
  */
-export function sortCards(cards: Card[]): Card[] {
+export function sortCards(cards: Card[], sortMethod: CardSortMethod = 'left-to-right'): Card[] {
   const colorOrder: Record<string, number> = {
     Green: 0,
     Red: 1,
@@ -45,17 +52,43 @@ export function sortCards(cards: Card[]): Card[] {
     Rook: 4,
   };
 
-  const getRankValue = (rank: number | null): number => {
+  const getRankValue = (rank: number | null, method: CardSortMethod): number => {
     if (rank === null) return -1;
-    if (rank === 1) return 15;
-    return rank;
+    
+    switch (method) {
+      case 'left-to-right':
+        // 2 → 14, then 1 (Ace is highest, so rank 1 becomes 15)
+        if (rank === 1) return 15;
+        return rank;
+      
+      case 'left-to-right-goofy':
+        // Simple numeric: 1 → 14
+        return rank;
+      
+      case 'right-to-left':
+        // Reversed: high cards on right (1 is highest, so we invert)
+        // We want: 1 (highest) on right, 2-14 descending to left
+        if (rank === 1) return 15;
+        return rank;
+      
+      default:
+        if (rank === 1) return 15;
+        return rank;
+    }
   };
 
-  return [...cards].sort((a, b) => {
+  const sorted = [...cards].sort((a, b) => {
     const colorDiff = colorOrder[a.color] - colorOrder[b.color];
     if (colorDiff !== 0) return colorDiff;
-    return getRankValue(a.rank) - getRankValue(b.rank);
+    return getRankValue(a.rank, sortMethod) - getRankValue(b.rank, sortMethod);
   });
+
+  // For right-to-left, reverse the entire array so high cards are on the right
+  if (sortMethod === 'right-to-left') {
+    return sorted.reverse();
+  }
+
+  return sorted;
 }
 
 /**

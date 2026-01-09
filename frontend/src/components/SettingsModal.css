@@ -1,0 +1,140 @@
+/* Settings Modal specific styles */
+.settings-modal {
+  max-width: 400px;
+}
+
+.settings-section {
+  display: flex;
+  flex-direction: column;
+  gap: 1rem;
+}
+
+.settings-section-title {
+  color: #f5f5f5;
+  font-size: 1rem;
+  font-weight: 600;
+  margin: 0;
+}
+
+.settings-section-description {
+  color: #8b9dc3;
+  font-size: 0.85rem;
+  margin: 0;
+}
+
+.sort-options {
+  display: flex;
+  flex-direction: column;
+  gap: 0.75rem;
+}
+
+.sort-option {
+  display: flex;
+  align-items: center;
+  gap: 1rem;
+  padding: 1rem;
+  background: rgba(0, 0, 0, 0.3);
+  border: 2px solid rgba(255, 255, 255, 0.1);
+  border-radius: 12px;
+  cursor: pointer;
+  transition: all 0.2s;
+}
+
+.sort-option:hover {
+  background: rgba(255, 255, 255, 0.05);
+  border-color: rgba(255, 255, 255, 0.2);
+}
+
+.sort-option.selected {
+  background: rgba(74, 222, 128, 0.1);
+  border-color: rgba(74, 222, 128, 0.4);
+}
+
+.sort-option input[type="radio"] {
+  display: none;
+}
+
+.sort-option-content {
+  flex: 1;
+  display: flex;
+  flex-direction: column;
+  gap: 0.25rem;
+}
+
+.sort-option-label {
+  color: #e0e0e0;
+  font-size: 0.95rem;
+  font-weight: 600;
+}
+
+.sort-option.selected .sort-option-label {
+  color: #4ade80;
+}
+
+.sort-option-description {
+  color: #8b9dc3;
+  font-size: 0.8rem;
+}
+
+.sort-option-check {
+  width: 24px;
+  height: 24px;
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  color: #4ade80;
+  font-size: 1rem;
+  font-weight: 700;
+}
+
+/* Settings Button (used in headers) */
+.settings-btn {
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  width: 40px;
+  height: 40px;
+  border-radius: 10px;
+  background: rgba(255, 255, 255, 0.08);
+  border: none;
+  color: #a0a0a0;
+  cursor: pointer;
+  transition: all 0.2s;
+  -webkit-tap-highlight-color: transparent;
+}
+
+.settings-btn:hover {
+  background: rgba(255, 255, 255, 0.15);
+  color: #e0e0e0;
+}
+
+.settings-btn:active {
+  transform: scale(0.95);
+}
+
+.settings-btn svg {
+  width: 22px;
+  height: 22px;
+}
+
+/* Mobile adjustments */
+@media (max-width: 480px) {
+  .settings-modal {
+    max-width: 100%;
+    margin: 1rem;
+  }
+
+  .sort-option {
+    padding: 0.875rem;
+  }
+
+  .settings-btn {
+    width: 36px;
+    height: 36px;
+  }
+
+  .settings-btn svg {
+    width: 20px;
+    height: 20px;
+  }
+}

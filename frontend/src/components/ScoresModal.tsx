@@ -9,7 +9,10 @@ interface ScoresModalProps {
   onClose: () => void;
   isDealer: boolean;
   isGameOver: boolean;
+  isHost: boolean;
   onDealNextHand: () => void;
+  onBackToLobby: () => void;
+  winner?: 'team0' | 'team1' | null;
 }
 
 export const ScoresModal: React.FC<ScoresModalProps> = ({
@@ -19,7 +22,10 @@ export const ScoresModal: React.FC<ScoresModalProps> = ({
   onClose,
   isDealer,
   isGameOver,
+  isHost,
   onDealNextHand,
+  onBackToLobby,
+  winner,
 }) => {
   if (!teams || handHistory.length === 0) {
     return null;
@@ -34,12 +40,28 @@ export const ScoresModal: React.FC<ScoresModalProps> = ({
   const myTeamTotal = finalTotals[`${myTeam}Total` as keyof HandScore] as number;
   const opponentTeamTotal = finalTotals[`${opponentTeam}Total` as keyof HandScore] as number;
 
+  // Check if my team won
+  const didWeWin = winner === myTeam;
+
   return (
-    <div className="scores-modal-overlay" onClick={onClose}>
+    <div className="scores-modal-overlay" onClick={isGameOver ? undefined : onClose}>
       <div className="scores-modal-content" onClick={(e) => e.stopPropagation()}>
+        {isGameOver && winner && (
+          <div className={`game-over-banner ${didWeWin ? 'victory' : 'defeat'}`}>
+            <div className="game-over-icon">{didWeWin ? '🏆' : '😔'}</div>
+            <div className="game-over-text">
+              {didWeWin ? 'Victory!' : 'Defeat'}
+            </div>
+            <div className="game-over-subtext">
+              {didWeWin ? 'Your team wins the game!' : 'Better luck next time!'}
+            </div>
+          </div>
+        )}
         <div className="scores-modal-header">
-          <h2>SCORES</h2>
-          <button className="scores-modal-close" onClick={onClose}>×</button>
+          <h2>{isGameOver ? 'FINAL SCORES' : 'SCORES'}</h2>
+          {!isGameOver && (
+            <button className="scores-modal-close" onClick={onClose}>×</button>
+          )}
         </div>
         <div className="scores-modal-body">
           <div className="scores-table">
@@ -101,19 +123,27 @@ export const ScoresModal: React.FC<ScoresModalProps> = ({
             </div>
           </div>
         </div>
-        {!isGameOver && (
-          <div className="scores-modal-footer">
-            {isDealer ? (
-              <button className="scores-modal-deal-btn" onClick={onDealNextHand}>
-                Deal Next Hand
+        <div className="scores-modal-footer">
+          {isGameOver ? (
+            isHost ? (
+              <button className="scores-modal-lobby-btn" onClick={onBackToLobby}>
+                Back to Lobby
               </button>
             ) : (
               <div className="scores-modal-waiting">
-                Waiting for dealer to deal the next hand...
+                Waiting for host to return to lobby...
               </div>
-            )}
-          </div>
-        )}
+            )
+          ) : isDealer ? (
+            <button className="scores-modal-deal-btn" onClick={onDealNextHand}>
+              Deal Next Hand
+            </button>
+          ) : (
+            <div className="scores-modal-waiting">
+              Waiting for dealer to deal the next hand...
+            </div>
+          )}
+        </div>
       </div>
     </div>
   );

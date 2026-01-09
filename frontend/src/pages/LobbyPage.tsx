@@ -1,7 +1,9 @@
 import React, { useState, useEffect } from 'react';
 import { useNavigate, useSearchParams } from 'react-router-dom';
 import { gameApi } from '../services/gameApi';
-import { localStorageUtils } from '../utils/localStorage';
+import { localStorageUtils, CardSortMethod } from '../utils/localStorage';
+import { SettingsModal } from '../components';
+import rookIcon from '../assets/cards/rook.png';
 import './LobbyPage.css';
 
 const LobbyPage: React.FC = () => {
@@ -11,7 +13,22 @@ const LobbyPage: React.FC = () => {
   const [isLoading, setIsLoading] = useState(false);
   const [error, setError] = useState<string | null>(null);
   const [hasAutoJoined, setHasAutoJoined] = useState(false);
+  const [showSettings, setShowSettings] = useState(false);
+  const [cardSortMethod, setCardSortMethod] = useState<CardSortMethod>(() => localStorageUtils.getCardSortMethod());
   const navigate = useNavigate();
+
+  const handleCardSortMethodChange = (method: CardSortMethod) => {
+    setCardSortMethod(method);
+    localStorageUtils.saveCardSortMethod(method);
+  };
+
+  // Pre-fill game code from URL parameter
+  useEffect(() => {
+    const urlGameId = searchParams.get('gameId');
+    if (urlGameId && !gameCode) {
+      setGameCode(urlGameId.toUpperCase());
+    }
+  }, [searchParams, gameCode]);
 
   // Auto-join functionality: fill form fields and click button
   useEffect(() => {
@@ -152,18 +169,28 @@ const LobbyPage: React.FC = () => {
 
   return (
     <div className="lobby-container">
+      <button
+        className="settings-btn lobby-settings-btn"
+        onClick={() => setShowSettings(true)}
+        aria-label="Settings"
+      >
+        <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round">
+          <circle cx="12" cy="12" r="3" />
+          <path d="M19.4 15a1.65 1.65 0 0 0 .33 1.82l.06.06a2 2 0 0 1 0 2.83 2 2 0 0 1-2.83 0l-.06-.06a1.65 1.65 0 0 0-1.82-.33 1.65 1.65 0 0 0-1 1.51V21a2 2 0 0 1-2 2 2 2 0 0 1-2-2v-.09A1.65 1.65 0 0 0 9 19.4a1.65 1.65 0 0 0-1.82.33l-.06.06a2 2 0 0 1-2.83 0 2 2 0 0 1 0-2.83l.06-.06a1.65 1.65 0 0 0 .33-1.82 1.65 1.65 0 0 0-1.51-1H3a2 2 0 0 1-2-2 2 2 0 0 1 2-2h.09A1.65 1.65 0 0 0 4.6 9a1.65 1.65 0 0 0-.33-1.82l-.06-.06a2 2 0 0 1 0-2.83 2 2 0 0 1 2.83 0l.06.06a1.65 1.65 0 0 0 1.82.33H9a1.65 1.65 0 0 0 1-1.51V3a2 2 0 0 1 2-2 2 2 0 0 1 2 2v.09a1.65 1.65 0 0 0 1 1.51 1.65 1.65 0 0 0 1.82-.33l.06-.06a2 2 0 0 1 2.83 0 2 2 0 0 1 0 2.83l-.06.06a1.65 1.65 0 0 0-.33 1.82V9a1.65 1.65 0 0 0 1.51 1H21a2 2 0 0 1 2 2 2 2 0 0 1-2 2h-.09a1.65 1.65 0 0 0-1.51 1z" />
+        </svg>
+      </button>
       <div className="lobby-card">
         <div className="lobby-header">
-          <div className="rook-icon">♜</div>
-          <h1>Rook Online</h1>
-          <p className="subtitle">Multiplayer Card Game</p>
+          <div className="rook-icon">
+            <img src={rookIcon} alt="Rook" />
+          </div>
+          <h1>Hwang Rook</h1>
         </div>
 
         {error && <div className="error-message">{error}</div>}
 
         <div className="lobby-form">
           <div className="input-group">
-            <label htmlFor="playerName">Your Name</label>
             <input
               type="text"
               id="playerName"
@@ -194,7 +221,6 @@ const LobbyPage: React.FC = () => {
 
           <div className="join-section">
             <div className="input-group">
-              <label htmlFor="gameCode">Game Code</label>
               <input
                 type="text"
                 id="gameCode"
@@ -215,11 +241,13 @@ const LobbyPage: React.FC = () => {
             </button>
           </div>
         </div>
-
-        <div className="lobby-footer">
-          <p>Play Rook with friends anywhere!</p>
-        </div>
       </div>
+      <SettingsModal
+        isOpen={showSettings}
+        onClose={() => setShowSettings(false)}
+        cardSortMethod={cardSortMethod}
+        onCardSortMethodChange={handleCardSortMethodChange}
+      />
     </div>
   );
 };

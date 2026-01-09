@@ -46,11 +46,17 @@
 }
 
 .rook-icon {
-  font-size: 4rem;
-  color: #d4a574;
-  text-shadow: 0 4px 20px rgba(212, 165, 116, 0.4);
+  display: flex;
+  align-items: center;
+  justify-content: center;
   margin-bottom: 0.5rem;
   filter: drop-shadow(0 0 10px rgba(212, 165, 116, 0.3));
+}
+
+.rook-icon img {
+  width: 4rem;
+  height: 4rem;
+  object-fit: contain;
 }
 
 .lobby-header h1 {
@@ -226,8 +232,9 @@
     border-radius: 20px;
   }
 
-  .rook-icon {
-    font-size: 3.5rem;
+  .rook-icon img {
+    width: 3.5rem;
+    height: 3.5rem;
   }
 
   .lobby-header h1 {
@@ -264,4 +271,12 @@
     flex-shrink: 0;
     width: auto;
   }
+}
+
+/* Settings button in lobby */
+.lobby-settings-btn {
+  position: absolute;
+  top: 1rem;
+  right: 1rem;
+  z-index: 10;
 }

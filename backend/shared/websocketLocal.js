@@ -75,7 +75,7 @@ async function broadcastToGame(client, gameId, message) {
       }
     });
     
-    // Update in-memory connections
+    // Update in-memory connections with new seat assignments
     if (client.connections) {
       for (const [connId, connInfo] of client.connections.entries()) {
         if (connInfo.gameId === gameId.toUpperCase() && connInfo.seat !== null && connInfo.seat !== undefined) {
@@ -83,9 +83,10 @@ async function broadcastToGame(client, gameId, message) {
             // Match by player name from connection
             return p.name === connInfo.playerName;
           });
-          if (newPlayer) {
+          if (newPlayer && newPlayer.seat !== connInfo.seat) {
+            const oldSeat = connInfo.seat;
             connInfo.seat = newPlayer.seat;
-            console.log(`Updated connection ${connId} seat from ${connInfo.seat} to ${newPlayer.seat}`);
+            console.log(`Updated in-memory connection ${connId} (${connInfo.playerName}) seat from ${oldSeat} to ${newPlayer.seat}`);
           }
         }
       }

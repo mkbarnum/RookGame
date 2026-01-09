@@ -20,6 +20,7 @@ interface UseWebSocketProps {
   onTrickWon: (winner: number, points: number) => void;
   onHandComplete: (message: any) => void;
   onGameOver: (message: any) => void;
+  onGameReset: (message: any) => void;
   onError: (action: string, message: string) => void;
 }
 
@@ -40,6 +41,7 @@ export const useWebSocket = ({
   onTrickWon,
   onHandComplete,
   onGameOver,
+  onGameReset,
   onError,
 }: UseWebSocketProps) => {
   const wsRef = useRef<WebSocket | null>(null);
@@ -62,6 +64,7 @@ export const useWebSocket = ({
     onTrickWon,
     onHandComplete,
     onGameOver,
+    onGameReset,
     onError,
   });
 
@@ -83,6 +86,7 @@ export const useWebSocket = ({
       onTrickWon,
       onHandComplete,
       onGameOver,
+      onGameReset,
       onError,
     };
   }, [
@@ -101,6 +105,7 @@ export const useWebSocket = ({
     onTrickWon,
     onHandComplete,
     onGameOver,
+    onGameReset,
     onError,
   ]);
 
@@ -122,13 +127,15 @@ export const useWebSocket = ({
   }, []);
 
   useEffect(() => {
-    // Connect when game is FULL, PARTNER_SELECTION, BIDDING, TRUMP_SELECTION, or PLAYING
+    // Connect when game is FULL, PARTNER_SELECTION, BIDDING, TRUMP_SELECTION, PLAYING, or FINISHED
+    // Keep connection open when FINISHED so we can receive gameReset messages
     if (
       gameState.status !== 'FULL' &&
       gameState.status !== 'PARTNER_SELECTION' &&
       gameState.status !== 'BIDDING' &&
       gameState.status !== 'TRUMP_SELECTION' &&
-      gameState.status !== 'PLAYING'
+      gameState.status !== 'PLAYING' &&
+      gameState.status !== 'FINISHED'
     ) {
       return;
     }
@@ -232,6 +239,10 @@ export const useWebSocket = ({
 
           case 'gameOver':
             callbacks.onGameOver(message);
+            break;
+
+          case 'gameReset':
+            callbacks.onGameReset(message);
             break;
 
           case 'bidError':
