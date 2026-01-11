@@ -9,6 +9,8 @@ interface CardFanProps {
   onCardPlay: (card: CardType) => void;
   isCardPlayable: (card: CardType) => boolean;
   isMyTurn: boolean;
+  isDealing?: boolean;
+  dealtCardCount?: number; // Number of cards that have been dealt to hand
 }
 
 export const CardFan: React.FC<CardFanProps> = ({
@@ -16,7 +18,10 @@ export const CardFan: React.FC<CardFanProps> = ({
   onCardPlay,
   isCardPlayable,
   isMyTurn,
+  isDealing = false,
+  dealtCardCount = 0,
 }) => {
+  // eslint-disable-next-line @typescript-eslint/no-unused-vars
   const [focusedIndex, setFocusedIndex] = useState<number | null>(null);
   const [isDragging, setIsDragging] = useState(false);
   const [isCardDragging, setIsCardDragging] = useState(false); // Native card drag state
@@ -27,48 +32,71 @@ export const CardFan: React.FC<CardFanProps> = ({
   const [touchDraggedElement, setTouchDraggedElement] = useState<HTMLElement | null>(null);
   const [touchDragClone, setTouchDragClone] = useState<HTMLElement | null>(null);
   const [dragOffset, setDragOffset] = useState(0);
+  const [flippedIndices, setFlippedIndices] = useState<Set<number>>(new Set());
+  const [flippingIndices, setFlippingIndices] = useState<Set<number>>(new Set());
   const containerRef = useRef<HTMLDivElement>(null);
   const startXRef = useRef(0);
   const startDragOffsetRef = useRef(0);
+  const flipTimeoutRefs = useRef<NodeJS.Timeout[]>([]);
 
   const totalCards = cards.length;
+  const topRowMaxCards = 6;
+  const bottomRowMaxCards = 7;
   
-  // Calculate fan parameters based on card count
-  // Gentle arc - less curve for better readability
-  const maxArcAngle = Math.min(40, 15 + totalCards * 1.5); // Reduced arc spread
-  const angleStep = totalCards > 1 ? maxArcAngle / (totalCards - 1) : 0;
-  const startAngle = -maxArcAngle / 2;
+  // Split cards into two rows
+  // Top row gets first 6 cards, bottom row gets remaining 7 cards
+  const topRowCards = Math.min(totalCards, topRowMaxCards);
+  const bottomRowCards = Math.max(0, Math.min(totalCards - topRowMaxCards, bottomRowMaxCards));
+  
+  // Calculate fan parameters based on row card count
+  const getRowParams = (rowCardCount: number) => {
+    const maxArcAngle = Math.min(40, 15 + rowCardCount * 1.5);
+    const angleStep = rowCardCount > 1 ? maxArcAngle / (rowCardCount - 1) : 0;
+    const startAngle = -maxArcAngle / 2;
+    return { maxArcAngle, angleStep, startAngle };
+  };
+
+  const topRowParams = getRowParams(topRowCards);
+  const bottomRowParams = getRowParams(bottomRowCards);
 
   // Calculate card position and rotation
   const getCardStyle = (index: number): React.CSSProperties => {
-    const baseAngle = startAngle + index * angleStep;
-    const isFocused = focusedIndex === index;
+    // Top row is index < 6, bottom row is index >= 6
+    const isTopRow = index < topRowMaxCards;
+    const rowIndex = isTopRow ? index : index - topRowMaxCards;
+    const rowCardCount = isTopRow ? topRowCards : bottomRowCards;
+    const rowParams = isTopRow ? topRowParams : bottomRowParams;
+    
+    // Calculate angle for this row
+    const baseAngle = rowParams.startAngle + rowIndex * rowParams.angleStep;
     
     // Apply drag offset to the angle calculation
     const dragAngleOffset = dragOffset * 0.15; // Convert pixels to degrees
     const angle = baseAngle + dragAngleOffset;
     
-    // Vertical position follows a gentle parabolic curve (cards at edges are slightly lower)
-    const normalizedPos = (index - (totalCards - 1) / 2) / Math.max(1, (totalCards - 1) / 2);
-    const yOffset = normalizedPos * normalizedPos * 8; // Very gentle curve
+    // Vertical position: top row above, bottom row at bottom
+    // Row spacing: reduced to create more overlap between rows
+    const rowYOffset = isTopRow ? -80 : 0; // Top row is 80px above bottom row (reduced for more overlap)
+    const normalizedPos = (rowIndex - (rowCardCount - 1) / 2) / Math.max(1, (rowCardCount - 1) / 2);
+    const yOffset = rowYOffset + (normalizedPos * normalizedPos * 8); // Very gentle curve
     
     // Calculate horizontal spread - spread cards across the full width
-    // Each card gets its own horizontal position based on index
-    const cardSpacing = 22; // Pixels between card centers
-    const totalWidth = (totalCards - 1) * cardSpacing;
-    const xOffset = (index * cardSpacing) - (totalWidth / 2);
+    // Increased spacing to accommodate larger cards (30% larger)
+    const cardSpacing = 29; // Pixels between card centers (22 * 1.3 = 28.6)
+    const totalWidth = (rowCardCount - 1) * cardSpacing;
+    const xOffset = (rowIndex * cardSpacing) - (totalWidth / 2);
     
-    // Z-index: left cards behind right cards so numbers are always visible
-    // Focused card gets highest z-index
-    const baseZIndex = index + 1;
+    // Z-index: bottom row should overlay top row
+    // Bottom row gets higher z-index so it appears on top
+    const baseZIndex = isTopRow ? (index + 1) : (index + 1 + 200); // Bottom row on top, top row behind
     
     return {
       '--rotation': `${angle}deg`,
       '--y-offset': `${yOffset}px`,
       '--x-offset': `${xOffset}px`,
-      '--z-index': isFocused ? totalCards + 10 : baseZIndex,
-      '--scale': isFocused ? 1.15 : 1,
-      '--lift': isFocused ? '-25px' : '0px',
+      '--z-index': baseZIndex,
+      '--scale': 1, // No scaling on hover/focus
+      '--lift': '0px', // No lift effect - cards should never raise
       '--transition-delay': `${index * 15}ms`,
     } as React.CSSProperties;
   };
@@ -111,15 +139,18 @@ export const CardFan: React.FC<CardFanProps> = ({
     setDragOffset(0);
   }, []);
 
-  // Mouse event handlers
+  // Mouse event handlers - allow fan scrolling when not my turn (for viewing), but disable when my turn (for drag/drop)
   const handleMouseDown = (e: React.MouseEvent) => {
     // Don't interfere with native drag on draggable elements
     const target = e.target as HTMLElement;
     if (target.closest('[draggable="true"]') || isCardDragging) {
       return;
     }
-    e.preventDefault();
-    handleDragStart(e.clientX);
+    // Allow fan scrolling when not my turn (to view cards), but disable when my turn (so drag/drop works)
+    if (!isMyTurn) {
+      e.preventDefault();
+      handleDragStart(e.clientX);
+    }
   };
 
   const handleMouseMove = useCallback((e: MouseEvent) => {
@@ -158,7 +189,10 @@ export const CardFan: React.FC<CardFanProps> = ({
       return;
     }
 
-    handleDragStart(touch.clientX);
+    // Allow fan scrolling when not my turn (to view cards), but disable when my turn (so drag/drop works)
+    if (!isMyTurn) {
+      handleDragStart(touch.clientX);
+    }
   };
 
   const handleTouchMove = useCallback((e: TouchEvent) => {
@@ -324,24 +358,75 @@ export const CardFan: React.FC<CardFanProps> = ({
     };
   }, []);
 
-  // Handle card focus on hover (desktop)
-  const handleCardHover = (index: number) => {
-    if (!isDragging) {
-      setFocusedIndex(index);
+  // Handle deal animation: flip cards sequentially (only after all cards are dealt)
+  useEffect(() => {
+    // Clear any existing timeouts
+    flipTimeoutRefs.current.forEach(timeout => clearTimeout(timeout));
+    flipTimeoutRefs.current = [];
+
+    // Only start flip animation when all cards are dealt and we're in flipping phase
+    const allCardsDealt = dealtCardCount >= cards.length && cards.length > 0;
+    if (!isDealing || !allCardsDealt || cards.length === 0) {
+      // Reset state when not dealing or not all cards dealt yet
+      if (!isDealing) {
+        setFlippedIndices(new Set());
+        setFlippingIndices(new Set());
+      }
+      return;
     }
+
+    // Start with all cards face down
+    setFlippedIndices(new Set());
+    setFlippingIndices(new Set());
+
+    const totalCards = cards.length;
+
+    // Flip cards one by one with 100ms delay between each
+    for (let index = 0; index < totalCards; index++) {
+      const timeout = setTimeout(() => {
+        // Mark card as flipping
+        setFlippingIndices(prev => new Set(prev).add(index));
+        
+        // After flip animation completes (300ms), mark as flipped
+        const flipCompleteTimeout = setTimeout(() => {
+          setFlippedIndices(prev => {
+            const newSet = new Set(prev);
+            newSet.add(index);
+            return newSet;
+          });
+          setFlippingIndices(prev => {
+            const newSet = new Set(prev);
+            newSet.delete(index);
+            return newSet;
+          });
+        }, 300); // Match CSS transition duration
+        
+        flipTimeoutRefs.current.push(flipCompleteTimeout);
+      }, index * 100); // 100ms delay between each card
+      
+      flipTimeoutRefs.current.push(timeout);
+    }
+
+    // Cleanup function
+    return () => {
+      flipTimeoutRefs.current.forEach(timeout => clearTimeout(timeout));
+      flipTimeoutRefs.current = [];
+    };
+  }, [isDealing, dealtCardCount, cards.length]); // Depend on dealtCardCount to trigger flip when all cards are dealt
+
+  // Handle card focus on hover (desktop) - disabled, cards should not raise
+  const handleCardHover = (index: number) => {
+    // Cards should never raise on hover - this is disabled
   };
 
   // Handle card unfocus
   const handleCardLeave = () => {
-    if (!isDragging) {
-      setFocusedIndex(null);
-    }
+    // Cards should never raise on hover - this is disabled
   };
 
-  // Handle card tap/click for mobile focus (double-tap disabled)
+  // Handle card tap/click - disabled, cards should only be drag/dropped
   const handleCardTap = (index: number, card: CardType) => {
-    // Single tap - focus the card (double-tap card playing disabled)
-    setFocusedIndex(index);
+    // No tap interaction - cards should only be drag/dropped when it's my turn
   };
 
   if (cards.length === 0) {
@@ -362,15 +447,18 @@ export const CardFan: React.FC<CardFanProps> = ({
     >
       <div className="card-fan">
         {cards.map((card, index) => {
-          const playable = isCardPlayable(card);
-          const isFocused = focusedIndex === index;
+          // Only render cards that have been dealt (or all cards if not dealing)
+          if (isDealing && index >= dealtCardCount) {
+            return null;
+          }
           
+          const playable = isCardPlayable(card);
           const canDrag = isMyTurn && playable;
           
           return (
             <div
               key={`${card.color}-${card.rank}-${index}`}
-              className={`card-fan-slot ${isFocused ? 'focused' : ''} ${!playable && isMyTurn ? 'not-playable' : ''}`}
+              className={`card-fan-slot ${!playable && isMyTurn ? 'not-playable' : ''} ${isDealing && index < dealtCardCount ? 'just-dealt' : ''} ${!isMyTurn ? 'not-my-turn' : ''}`}
               style={getCardStyle(index)}
               data-card-index={index}
               onMouseEnter={() => handleCardHover(index)}
@@ -409,18 +497,15 @@ export const CardFan: React.FC<CardFanProps> = ({
               <Card
                 card={card}
                 disabled={!isMyTurn || !playable}
+                isFaceDown={isDealing && index < dealtCardCount && !flippedIndices.has(index)}
+                isFlipping={flippingIndices.has(index)}
               />
             </div>
           );
         })}
       </div>
       
-      {/* Visual indicator for focused card */}
-      {focusedIndex !== null && isMyTurn && (
-        <div className="play-hint">
-          Drag to play
-        </div>
-      )}
+      {/* Visual indicator - removed, no hover/focus feedback */}
     </div>
   );
 };

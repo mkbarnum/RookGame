@@ -68,6 +68,9 @@ const LobbyPage: React.FC = () => {
     setError(null);
 
     try {
+      // Clear any old game state before creating a new game
+      localStorageUtils.clearGameState();
+      
       const data = await gameApi.createGame(name);
 
       // Store game info in localStorage
@@ -108,6 +111,9 @@ const LobbyPage: React.FC = () => {
     setError(null);
 
     try {
+      // Clear any old game state before joining a new game
+      localStorageUtils.clearGameState();
+      
       console.log('Fetching:', `${gameApi}`);
       const data = await gameApi.joinGame(code, name);
 

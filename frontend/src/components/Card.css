@@ -22,6 +22,11 @@
   touch-action: manipulation;
 }
 
+/* Cards inside draggable slots need touch-action: none for mobile drag */
+.card-fan-slot[draggable="true"] .card {
+  touch-action: none;
+}
+
 .card:active {
   transform: translateY(-6px) scale(1.02);
   box-shadow:
@@ -153,8 +158,8 @@
 
 /* ===== Card Back ===== */
 .card-back {
-  background: linear-gradient(145deg, #1e3a5f 0%, #0d1f33 100%);
-  border: 2px solid #2a4a6f;
+  background: #58DCED;
+  border: 2px solid #4ac5d6;
   cursor: default;
   display: flex;
   align-items: center;
@@ -172,13 +177,17 @@
   display: flex;
   align-items: center;
   justify-content: center;
+  width: 100%;
+  height: 100%;
 }
 
 .back-pattern-image {
-  width: 1.2rem;
-  height: 1.2rem;
+  width: 60%;
+  height: 60%;
+  max-width: 32px;
+  max-height: 45px;
   object-fit: contain;
-  opacity: 0.25;
+  opacity: 1;
 }
 
 /* ===== Responsive: Larger Phones ===== */
@@ -203,6 +212,11 @@
     top: 24px;
     left: 4px;
     width: calc(100% - 8px);
+  }
+
+  .back-pattern-image {
+    max-width: 36px;
+    max-height: 50px;
   }
 }
 
@@ -230,6 +244,11 @@
     left: 5px;
     width: calc(100% - 10px);
   }
+
+  .back-pattern-image {
+    max-width: 45px;
+    max-height: 63px;
+  }
 }
 
 /* ===== Responsive: Desktop ===== */
@@ -255,6 +274,11 @@
     top: 32px;
     left: 6px;
     width: calc(100% - 12px);
+  }
+
+  .back-pattern-image {
+    max-width: 52px;
+    max-height: 72px;
   }
 
   .card:hover {
@@ -288,5 +312,79 @@
     top: 18px;
     left: 3px;
     width: calc(100% - 6px);
+  }
+
+  .back-pattern-image {
+    max-width: 28px;
+    max-height: 40px;
+  }
+}
+
+/* ===== Card Flip Animation ===== */
+.card-flip-container {
+  width: 52px;
+  height: 72px;
+  perspective: 1000px;
+  position: relative;
+}
+
+.card-flip-inner {
+  position: relative;
+  width: 100%;
+  height: 100%;
+  transform-style: preserve-3d;
+  transition: transform 0.3s ease-in-out;
+}
+
+.card-flip-container.flipping .card-flip-inner {
+  transform: rotateY(180deg);
+}
+
+.card-flip-front,
+.card-flip-back {
+  position: absolute;
+  width: 100%;
+  height: 100%;
+  backface-visibility: hidden;
+  -webkit-backface-visibility: hidden;
+}
+
+.card-flip-front {
+  z-index: 2;
+}
+
+.card-flip-back {
+  transform: rotateY(180deg);
+}
+
+/* Responsive: Larger Phones */
+@media (min-width: 390px) {
+  .card-flip-container {
+    width: 56px;
+    height: 78px;
+  }
+}
+
+/* Responsive: Tablets */
+@media (min-width: 768px) {
+  .card-flip-container {
+    width: 70px;
+    height: 98px;
+  }
+}
+
+/* Responsive: Desktop */
+@media (min-width: 1024px) {
+  .card-flip-container {
+    width: 80px;
+    height: 112px;
+  }
+}
+
+/* Landscape Mode */
+@media (max-height: 500px) and (orientation: landscape) {
+  .card-flip-container {
+    width: 44px;
+    height: 62px;
   }
 }

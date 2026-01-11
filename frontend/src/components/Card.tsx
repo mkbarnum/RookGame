@@ -43,6 +43,8 @@ interface CardProps {
   selected?: boolean;
   disabled?: boolean;
   isKittyCard?: boolean;
+  isFaceDown?: boolean;
+  isFlipping?: boolean;
 }
 
 export const Card: React.FC<CardProps> = ({
@@ -51,6 +53,8 @@ export const Card: React.FC<CardProps> = ({
   selected = false,
   disabled = false,
   isKittyCard = false,
+  isFaceDown = false,
+  isFlipping = false,
 }) => {
   const colorClass = card.color.toLowerCase();
   const isRook = card.color === 'Rook';
@@ -63,37 +67,59 @@ export const Card: React.FC<CardProps> = ({
     }
   };
 
-  if (isRook) {
+  // Render card face (normal card content)
+  const renderCardFace = () => {
+    if (isRook) {
+      return (
+        <button
+          className={`card rook ${selected ? 'card-selected' : ''} ${disabled ? 'card-disabled' : ''}`}
+          onClick={handleClick}
+          type="button"
+          disabled={disabled}
+        >
+          <span className="card-corner-number rook-corner">R</span>
+          <div className="card-center-frame rook-center-frame">
+            <img src={rookImg} alt="Rook" className="card-center-image" />
+          </div>
+        </button>
+      );
+    }
+
+    const cardImage = isKittyCard ? kittyImg : (card.rank !== null ? cardImages[card.rank] : undefined);
     return (
       <button
-        className={`card rook ${selected ? 'card-selected' : ''} ${disabled ? 'card-disabled' : ''}`}
+        className={`card card-new-style ${colorClass} ${selected ? 'card-selected' : ''} ${disabled ? 'card-disabled' : ''}`}
         onClick={handleClick}
         type="button"
         disabled={disabled}
       >
-        <span className="card-corner-number rook-corner">R</span>
-        <div className="card-center-frame rook-center-frame">
-          <img src={rookImg} alt="Rook" className="card-center-image" />
+        <span className="card-corner-number">{card.rank}</span>
+        <div className="card-center-frame">
+          {cardImage && <img src={cardImage} alt={isKittyCard ? 'kitty' : `${card.rank}`} className="card-center-image" />}
         </div>
       </button>
     );
+  };
+
+  // If dealing (face down or currently flipping), use flip container
+  // Once flipped, we can render normally (no flip container needed)
+  if (isFaceDown || isFlipping) {
+    return (
+      <div className={`card-flip-container ${isFlipping ? 'flipping' : ''}`}>
+        <div className="card-flip-inner">
+          <div className="card-flip-front">
+            <CardBack />
+          </div>
+          <div className="card-flip-back">
+            {renderCardFace()}
+          </div>
+        </div>
+      </div>
+    );
   }
 
-  const cardImage = isKittyCard ? kittyImg : (card.rank !== null ? cardImages[card.rank] : undefined);
-
-  return (
-    <button
-      className={`card card-new-style ${colorClass} ${selected ? 'card-selected' : ''} ${disabled ? 'card-disabled' : ''}`}
-      onClick={handleClick}
-      type="button"
-      disabled={disabled}
-    >
-      <span className="card-corner-number">{card.rank}</span>
-      <div className="card-center-frame">
-        {cardImage && <img src={cardImage} alt={isKittyCard ? 'kitty' : `${card.rank}`} className="card-center-image" />}
-      </div>
-    </button>
-  );
+  // Face up and not dealing - normal rendering (no flip container)
+  return renderCardFace();
 };
 
 export const CardBack: React.FC = () => (

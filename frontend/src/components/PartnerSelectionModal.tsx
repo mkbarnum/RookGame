@@ -79,7 +79,10 @@ export const PartnerSelectionModal: React.FC<PartnerSelectionModalProps> = ({
                 disabled={isSelectingPartner}
               >
                 <div className="partner-avatar">{player.name[0].toUpperCase()}</div>
-                <div className="partner-name">{player.name}</div>
+                <div className="partner-name">
+                  {player.isBot && '🤖 '}
+                  {player.name}
+                </div>
                 {isSelectingPartner && <div className="partner-loading">...</div>}
               </button>
             ))}

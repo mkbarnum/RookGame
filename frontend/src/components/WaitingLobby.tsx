@@ -4,6 +4,7 @@ import { GameState, Player } from '../types/game';
 import { PartnerSelectionModal } from './PartnerSelectionModal';
 import { SettingsModal, CardSortMethod } from './SettingsModal';
 import { localStorageUtils } from '../utils/localStorage';
+import { gameApi } from '../services/gameApi';
 import rookIcon from '../assets/cards/rook.png';
 import './WaitingLobby.css';
 
@@ -25,15 +26,35 @@ export const WaitingLobby: React.FC<WaitingLobbyProps> = ({
   const [showPartnerModal, setShowPartnerModal] = useState(false);
   const [showSettings, setShowSettings] = useState(false);
   const [cardSortMethod, setCardSortMethod] = useState<CardSortMethod>(() => localStorageUtils.getCardSortMethod());
+  const [isAddingBot, setIsAddingBot] = useState(false);
   
   const handleCardSortMethodChange = (method: CardSortMethod) => {
     setCardSortMethod(method);
     localStorageUtils.saveCardSortMethod(method);
   };
+
+  const handleAddBot = async () => {
+    if (isAddingBot || gameState.players.length >= 4) return;
+    
+    setIsAddingBot(true);
+    try {
+      await gameApi.addBot(gameState.gameId);
+      // Refresh game state
+      onRefresh();
+    } catch (error) {
+      console.error('Error adding bot:', error);
+      alert(error instanceof Error ? error.message : 'Failed to add bot');
+    } finally {
+      setIsAddingBot(false);
+    }
+  };
   
   // Create a map of occupied seats
   const seatMap = new Map<number, Player>();
   gameState.players.forEach(p => seatMap.set(p.seat, p));
+  
+  const canAddBot = gameState.isHost && gameState.players.length < 4 && 
+                    (gameState.status === 'LOBBY' || gameState.status === 'FULL');
 
   return (
     <div className="waiting-lobby">
@@ -82,7 +103,7 @@ export const WaitingLobby: React.FC<WaitingLobbyProps> = ({
                 className="share-btn"
                 onClick={async () => {
                   const shareUrl = `${window.location.origin}/?gameId=${gameState.gameId}`;
-                  const shareText = `Join my rook game now! ${shareUrl}`;
+                  const shareText = `Join my rook game now!`;
                   
                   // Use Web Share API if available (mobile devices)
                   if (navigator.share) {
@@ -108,6 +129,16 @@ export const WaitingLobby: React.FC<WaitingLobbyProps> = ({
                 Share
               </button>
             </div>
+            {canAddBot && (
+              <button
+                type="button"
+                className="add-bot-btn"
+                onClick={handleAddBot}
+                disabled={isAddingBot}
+              >
+                {isAddingBot ? 'Adding...' : `Add Bot (${gameState.players.length}/4)`}
+              </button>
+            )}
           </div>
         ) : (
           <>
@@ -149,8 +180,15 @@ export const WaitingLobby: React.FC<WaitingLobbyProps> = ({
                   <div className="player-info-slot">
                     <span className="player-label">{seatLabels[seat]}</span>
                     <span className="player-name-slot">
-                      {player ? player.name : 'Waiting...'}
-                      {isYou && ' (You)'}
+                      {player ? (
+                        <>
+                          {player.isBot && '🤖 '}
+                          {player.name}
+                          {isYou && ' (You)'}
+                        </>
+                      ) : (
+                        'Waiting...'
+                      )}
                     </span>
                   </div>
                   <div className={`status-indicator ${player ? 'ready' : 'waiting'}`}>

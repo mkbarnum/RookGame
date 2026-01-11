@@ -76,4 +76,27 @@ export const gameApi = {
       return null;
     }
   },
+
+  /**
+   * Add a bot player to the game
+   */
+  async addBot(gameId: string): Promise<{ success: boolean; bot: Player; players: Player[]; status: string }> {
+    const response = await fetch(`${API_BASE_URL}/addBot`, {
+      method: 'POST',
+      headers: {
+        'Content-Type': 'application/json',
+      },
+      body: JSON.stringify({
+        gameId: gameId.toUpperCase(),
+      }),
+    });
+
+    const data = await response.json();
+
+    if (!response.ok || !data.success) {
+      throw new Error(data.message || 'Failed to add bot');
+    }
+
+    return data;
+  },
 };

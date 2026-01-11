@@ -1,0 +1,77 @@
+/* Quick Chat Modal specific styles */
+.quick-chat-modal {
+  max-width: 400px;
+}
+
+.quick-chat-options-container {
+  display: flex;
+  flex-direction: column;
+  gap: 0.75rem;
+  max-height: 400px;
+  height: 400px;
+  overflow-y: auto;
+  overflow-x: hidden;
+  padding-right: 0.5rem;
+}
+
+/* Custom scrollbar styling */
+.quick-chat-options-container::-webkit-scrollbar {
+  width: 8px;
+}
+
+.quick-chat-options-container::-webkit-scrollbar-track {
+  background: rgba(0, 0, 0, 0.2);
+  border-radius: 4px;
+}
+
+.quick-chat-options-container::-webkit-scrollbar-thumb {
+  background: rgba(255, 255, 255, 0.2);
+  border-radius: 4px;
+}
+
+.quick-chat-options-container::-webkit-scrollbar-thumb:hover {
+  background: rgba(255, 255, 255, 0.3);
+}
+
+.quick-chat-option {
+  width: 100%;
+  padding: 1rem 1.25rem;
+  background: rgba(0, 0, 0, 0.3);
+  border: 2px solid rgba(255, 255, 255, 0.1);
+  border-radius: 12px;
+  color: #e0e0e0;
+  font-size: 0.95rem;
+  font-weight: 500;
+  cursor: pointer;
+  transition: all 0.2s;
+  text-align: left;
+  -webkit-tap-highlight-color: transparent;
+}
+
+.quick-chat-option:hover {
+  background: rgba(255, 255, 255, 0.05);
+  border-color: rgba(255, 255, 255, 0.2);
+  transform: translateX(4px);
+}
+
+.quick-chat-option:active {
+  transform: translateX(2px) scale(0.98);
+}
+
+/* Mobile adjustments */
+@media (max-width: 480px) {
+  .quick-chat-modal {
+    max-width: 100%;
+    margin: 1rem;
+  }
+
+  .quick-chat-options-container {
+    max-height: 350px;
+    height: 350px;
+  }
+
+  .quick-chat-option {
+    padding: 0.875rem 1rem;
+    font-size: 0.9rem;
+  }
+}

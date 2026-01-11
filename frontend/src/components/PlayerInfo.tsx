@@ -18,9 +18,6 @@ export const PlayerInfo: React.FC<PlayerInfoProps> = ({
   isCurrentTurn,
 }) => (
   <div className={`player-info player-${position} ${isPartner ? 'partner' : ''} ${isCurrentTurn ? 'current-turn' : ''}`}>
-    <div className="player-avatar">
-      {name[0].toUpperCase()}
-    </div>
     <div className="player-details">
       <span className="player-name">{name}</span>
       {isPartner && <span className="partner-badge">Partner</span>}

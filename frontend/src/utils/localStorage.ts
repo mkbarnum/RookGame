@@ -5,9 +5,23 @@ export type CardSortMethod = 'left-to-right' | 'left-to-right-goofy' | 'right-to
 
 export const localStorageUtils = {
   /**
+   * Clear all game state from localStorage (call when joining a new game)
+   */
+  clearGameState(): void {
+    console.log('[localStorage] Clearing old game state');
+    localStorage.removeItem('rook_gameId');
+    localStorage.removeItem('rook_playerName');
+    localStorage.removeItem('rook_seat');
+    localStorage.removeItem('rook_isHost');
+    localStorage.removeItem('rook_players');
+    localStorage.removeItem('rook_teams');
+  },
+
+  /**
    * Save game state to localStorage
    */
   saveGameState(gameId: string, playerName: string, seat: number, isHost: boolean, players: Player[]): void {
+    console.log('[localStorage] Saving game state:', { gameId, playerName, seat, isHost, playersCount: players.length });
     localStorage.setItem('rook_gameId', gameId);
     localStorage.setItem('rook_playerName', playerName);
     localStorage.setItem('rook_seat', seat.toString());

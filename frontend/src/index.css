@@ -34,6 +34,24 @@ html, body {
   touch-action: manipulation;
 }
 
+/* Mobile: Prevent body scrolling - game container handles its own scrolling */
+@media (max-width: 767px) {
+  html {
+    overflow: hidden;
+    height: 100%;
+    position: relative;
+  }
+  
+  body {
+    overflow: hidden;
+    height: 100%;
+    position: relative;
+    /* Prevent pull-to-refresh and overscroll */
+    overscroll-behavior: none;
+    -webkit-overflow-scrolling: touch;
+  }
+}
+
 /* Safe area padding for notched devices */
 @supports (padding: env(safe-area-inset-bottom)) {
   body {

@@ -1,5 +1,6 @@
 // Component exports
 export { Card, CardBack } from './Card';
+export { Deck } from './Deck';
 export { CardFan } from './CardFan';
 export { PlayerInfo } from './PlayerInfo';
 export { TrickArea } from './TrickArea';
@@ -13,3 +14,5 @@ export { ScoresModal } from './ScoresModal';
 export { RookOverlay } from './RookOverlay';
 export { SettingsModal } from './SettingsModal';
 export type { CardSortMethod } from './SettingsModal';
+export { QuickChatModal } from './QuickChatModal';
+export { QuickChatMessage } from './QuickChatMessage';

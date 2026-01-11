@@ -11,7 +11,14 @@ export const useGameState = () => {
     // Try to get from navigation state first
     const navState = location.state as Partial<GameState> | null;
     
+    console.log('[GameState] Initializing... navState:', navState ? {
+      gameId: navState.gameId,
+      playerName: navState.playerName,
+      seat: navState.seat,
+    } : 'null');
+    
     if (navState?.gameId && navState?.playerName !== undefined) {
+      console.log('[GameState] Using navigation state for game:', navState.gameId);
       return {
         gameId: navState.gameId,
         playerName: navState.playerName,
@@ -28,6 +35,16 @@ export const useGameState = () => {
     const storedSeat = localStorage.getItem('rook_seat');
     const storedIsHost = localStorage.getItem('rook_isHost');
     const storedPlayers = localStorage.getItem('rook_players');
+    
+    console.log('[GameState] Falling back to localStorage:', {
+      gameId: storedGameId,
+      playerName: storedPlayerName,
+      seat: storedSeat,
+    });
+    
+    if (!storedGameId || storedGameId === 'UNKNOWN') {
+      console.warn('[GameState] ⚠️ No valid gameId found! This will prevent WebSocket connection.');
+    }
     
     return {
       gameId: storedGameId || 'UNKNOWN',

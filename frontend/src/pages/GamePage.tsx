@@ -1,4 +1,4 @@
-import React, { useState, useRef } from 'react';
+import React, { useState, useRef, useEffect } from 'react';
 import { Card as CardType, TrickWonNotification } from '../types/game';
 import { useGameState, useWebSocket } from '../hooks';
 import {
@@ -13,6 +13,9 @@ import {
   RookOverlay,
   SettingsModal,
   CardSortMethod,
+  Deck,
+  QuickChatModal,
+  QuickChatMessage,
 } from '../components';
 import { ScoresModal } from '../components/ScoresModal';
 import { sortCards, isCardPlayable, cardToString, parseCard } from '../utils/cardUtils';
@@ -42,6 +45,16 @@ const GamePage: React.FC = () => {
   const rookOverlayTimeoutRef = useRef<NodeJS.Timeout | null>(null);
   const [showSettings, setShowSettings] = useState(false);
   const [cardSortMethod, setCardSortMethod] = useState<CardSortMethod>(() => localStorageUtils.getCardSortMethod());
+  const [isDealing, setIsDealing] = useState(false);
+  const [dealtCardCount, setDealtCardCount] = useState(0);
+  const [isFlipping, setIsFlipping] = useState(false);
+  const [dealAnimationComplete, setDealAnimationComplete] = useState(false);
+  const [showQuickChat, setShowQuickChat] = useState(false);
+  const [quickChatMessages, setQuickChatMessages] = useState<Array<{ seat: number; message: string; timestamp: number }>>([]);
+  const [bidMessages, setBidMessages] = useState<Map<number, string>>(new Map()); // Track bid messages per player (seat -> message)
+  const previousStatusRef = useRef<string | undefined>(undefined);
+  const hasAnimatedForCurrentHandRef = useRef<boolean>(false);
+  const pendingCardPlaysRef = useRef<Set<string>>(new Set()); // Track cards currently being played to prevent duplicates
 
   const handleCardSortMethodChange = (method: CardSortMethod) => {
     setCardSortMethod(method);
@@ -61,13 +74,107 @@ const GamePage: React.FC = () => {
   // especially on mobile where side players are absolutely positioned.
   const isMyDiscardPhase =
     gameState.status === 'TRUMP_SELECTION' && gameState.bidWinner === gameState.seat;
+  
+  // Debug: Log the comparison whenever in TRUMP_SELECTION
+  if (gameState.status === 'TRUMP_SELECTION') {
+    console.log('[TrumpSelection] Checking if I should show DiscardUI:', {
+      status: gameState.status,
+      bidWinner: gameState.bidWinner,
+      bidWinnerType: typeof gameState.bidWinner,
+      mySeat: gameState.seat,
+      mySeatType: typeof gameState.seat,
+      isEqual: gameState.bidWinner === gameState.seat,
+      isMyDiscardPhase,
+    });
+  }
+
+  // Track status changes to detect new hands
+  useEffect(() => {
+    const previousStatus = previousStatusRef.current;
+    const currentStatus = gameState.status;
+    
+    // If we're transitioning TO BIDDING from a non-BIDDING status, it's a new hand
+    if (currentStatus === 'BIDDING' && previousStatus !== 'BIDDING' && previousStatus !== undefined) {
+      hasAnimatedForCurrentHandRef.current = false;
+    }
+    
+    // Reset animation flag when hand completes or game resets
+    if (currentStatus === 'FINISHED' || currentStatus === 'FULL' || currentStatus === 'PARTNER_SELECTION') {
+      hasAnimatedForCurrentHandRef.current = false;
+    }
+    
+    previousStatusRef.current = currentStatus;
+  }, [gameState.status]);
 
   // WebSocket handlers
   const { sendMessage } = useWebSocket({
     gameState,
+    onPlayerJoined: (player, players, status) => {
+      console.log('Player joined:', player, 'All players:', players);
+      setGameState(prev => ({
+        ...prev,
+        players: players,
+        status: status || prev.status,
+      }));
+      // Update localStorage
+      localStorage.setItem('rook_players', JSON.stringify(players));
+    },
     onDeal: (cards) => {
+      // Check if this is a reconnection:
+      // 1. We already have cards AND
+      // 2. We've already animated for this hand OR game is in TRUMP_SELECTION/PLAYING (past the initial deal)
+      // 3. AND the card count hasn't changed significantly (indicating a new hand)
+      const cardCountChanged = playerHand.length !== cards.length;
+      const isReconnection = playerHand.length > 0 && 
+        !cardCountChanged &&
+        (hasAnimatedForCurrentHandRef.current || 
+         gameState.status === 'TRUMP_SELECTION' || 
+         gameState.status === 'PLAYING');
+      
       setPlayerHand(cards);
-      console.log(`Received ${cards.length} cards`);
+      console.log(`Received ${cards.length} cards${isReconnection ? ' (reconnection, skipping animation)' : ''}`);
+      
+      // Only start dealing animation if this is a new hand, not a reconnection
+      // Animate if: we're in BIDDING/PARTNER_SELECTION and haven't animated yet, OR card count changed (new hand)
+      if (!isReconnection && (gameState.status === 'BIDDING' || gameState.status === 'PARTNER_SELECTION' || cardCountChanged)) {
+        // Mark that we've animated for this hand
+        hasAnimatedForCurrentHandRef.current = true;
+        
+        // Start dealing animation
+        setIsDealing(true);
+        setDealtCardCount(0);
+        setIsFlipping(false);
+        setDealAnimationComplete(false);
+        
+        // Deal cards one by one from deck (120ms between each card)
+        const dealDelay = 120;
+        let currentDealt = 0;
+        
+        const dealInterval = setInterval(() => {
+          currentDealt++;
+          setDealtCardCount(currentDealt);
+          
+          if (currentDealt >= cards.length) {
+            clearInterval(dealInterval);
+            // After all cards are dealt, wait for last card animation to complete (400ms)
+            // then start flip animation
+            setTimeout(() => {
+              setIsFlipping(true);
+              // Flip animation completes after all cards flip (13 cards * 100ms delay + 300ms flip duration)
+              const flipDuration = cards.length * 100 + 300;
+              setTimeout(() => {
+                setIsDealing(false);
+                setIsFlipping(false);
+                setDealtCardCount(0);
+                setDealAnimationComplete(true);
+              }, flipDuration);
+            }, 400);
+          }
+        }, dealDelay);
+      } else {
+        // Reconnection: just update the hand silently, mark animation as complete
+        setDealAnimationComplete(true);
+      }
     },
     onSeatsRearranged: (players, teams) => {
       const myNewSeat = players.find((p) => p.name === gameState.playerName)?.seat;
@@ -87,6 +194,8 @@ const GamePage: React.FC = () => {
       }
     },
     onBiddingStart: (startingPlayer, minBid) => {
+      // Clear all previous bid messages when bidding starts
+      setBidMessages(new Map());
       setBiddingState({
         highBid: 0,
         currentBidder: startingPlayer,
@@ -96,17 +205,40 @@ const GamePage: React.FC = () => {
         ...prev,
         status: 'BIDDING',
       }));
+      // If deal animation is already complete, show bidding UI immediately
+      // Otherwise, it will show when dealAnimationComplete becomes true
       console.log('Bidding started. Starting player:', startingPlayer);
     },
-    onBidPlaced: (amount, seat) => {
+    onBidPlaced: (amount: number, seat: number, nextBidder?: number) => {
       setBiddingState((prev) => ({
         ...prev,
         highBid: amount,
+        // Update currentBidder if nextBidder is provided (batched message)
+        ...(nextBidder !== undefined && { currentBidder: nextBidder }),
       }));
-      console.log(`Player ${seat} bid ${amount}`);
+      // Update or add bid message for this player (will replace existing bid)
+      setBidMessages((prev) => {
+        const newMap = new Map(prev);
+        newMap.set(seat, `${amount}`);
+        return newMap;
+      });
+      console.log(`Player ${seat} bid ${amount}${nextBidder !== undefined ? `, next bidder: ${nextBidder}` : ''}`);
     },
-    onPlayerPassed: (seat) => {
-      console.log(`Player ${seat} passed`);
+    onPlayerPassed: (seat: number, nextBidder?: number) => {
+      // Update or add "I fold" message for this player (will replace existing bid)
+      setBidMessages((prev) => {
+        const newMap = new Map(prev);
+        newMap.set(seat, 'I fold');
+        return newMap;
+      });
+      // Update currentBidder if nextBidder is provided (batched message)
+      if (nextBidder !== undefined) {
+        setBiddingState((prev) => ({
+          ...prev,
+          currentBidder: nextBidder,
+        }));
+      }
+      console.log(`Player ${seat} passed${nextBidder !== undefined ? `, next bidder: ${nextBidder}` : ''}`);
     },
     onNextBidder: (seat) => {
       setBiddingState((prev) => ({
@@ -136,25 +268,37 @@ const GamePage: React.FC = () => {
       }));
     },
     onBiddingWon: (winner, amount) => {
+      console.log('[BiddingWon] Received:', { winner, amount, winnerType: typeof winner });
+      console.log('[BiddingWon] My seat:', gameState.seat, 'type:', typeof gameState.seat);
+      console.log('[BiddingWon] Am I the winner?', winner === gameState.seat, 'strict:', winner === gameState.seat);
+      
+      // Clear all bid messages when bidding ends
+      setBidMessages(new Map());
       setBiddingState((prev) => ({
         ...prev,
         currentBidder: null,
       }));
-      setGameState((prev) => ({
-        ...prev,
-        status: 'TRUMP_SELECTION',
-        bidWinner: winner,
-        winningBid: amount,
-      }));
+      setGameState((prev) => {
+        console.log('[BiddingWon] Setting state - prev.seat:', prev.seat, 'winner:', winner);
+        console.log('[BiddingWon] Will show DiscardUI?', winner === prev.seat);
+        return {
+          ...prev,
+          status: 'TRUMP_SELECTION',
+          bidWinner: winner,
+          winningBid: amount,
+        };
+      });
       console.log(`Player ${winner} won the bid with ${amount} points`);
     },
-    onTrumpChosen: (suit) => {
+    onTrumpChosen: (suit: string, leader?: number) => {
       setGameState((prev) => ({
         ...prev,
         status: 'PLAYING',
         trump: suit,
+        // Update currentPlayer if leader is provided (batched message)
+        ...(leader !== undefined && { currentPlayer: leader }),
       }));
-      console.log(`Trump suit chosen: ${suit}`);
+      console.log(`Trump suit chosen: ${suit}${leader !== undefined ? `, leader: ${leader}` : ''}`);
     },
     onPlayStart: (leader) => {
       setGameState((prev) => ({
@@ -164,9 +308,14 @@ const GamePage: React.FC = () => {
       }));
       console.log(`Play started. Leader: seat ${leader}`);
     },
-    onCardPlayed: (seat, cardString) => {
+    onCardPlayed: (seat: number, cardString: string, nextPlayer?: number) => {
       console.log(`Player ${seat} played card ${cardString}`);
       const playedCard = parseCard(cardString);
+      
+      // Clear pending status for this card if it was our card
+      if (seat === gameState.seat) {
+        pendingCardPlaysRef.current.delete(cardString);
+      }
       
       // Show rook overlay if Rook card was played
       if (cardString === 'Rook') {
@@ -190,6 +339,14 @@ const GamePage: React.FC = () => {
           setGameState((prevState) => ({
             ...prevState,
             ledSuit: cardSuit,
+            // Update currentPlayer if nextPlayer is provided (batched message)
+            ...(nextPlayer !== undefined && { currentPlayer: nextPlayer }),
+          }));
+        } else if (nextPlayer !== undefined) {
+          // Update currentPlayer if nextPlayer is provided (batched message)
+          setGameState((prev) => ({
+            ...prev,
+            currentPlayer: nextPlayer,
           }));
         }
         return newTrick;
@@ -204,10 +361,15 @@ const GamePage: React.FC = () => {
     },
     onTrickWon: (winner, points) => {
       console.log(`Player ${winner} won the trick with ${points} points`);
+      // Clear any pending card plays when trick ends
+      pendingCardPlaysRef.current.clear();
+      
       setTrickWonNotification({ winner, points });
+      // Popup shows for 1 second
       setTimeout(() => {
         setTrickWonNotification(null);
-      }, 3000);
+      }, 2500);
+      // Cards disappear 1 second after popup goes away (2 seconds total: 1s popup + 1s delay)
       setTimeout(() => {
         setCurrentTrick([]);
         // Clear ledSuit when trick is won
@@ -215,7 +377,7 @@ const GamePage: React.FC = () => {
           ...prev,
           ledSuit: undefined,
         }));
-      }, 2000);
+      }, 3500);
     },
     onHandComplete: (message) => {
       console.log('Hand complete:', message);
@@ -254,6 +416,9 @@ const GamePage: React.FC = () => {
     },
     onGameReset: (message) => {
       console.log('Game reset:', message);
+      // Clear pending card plays
+      pendingCardPlaysRef.current.clear();
+      
       // Reset all local game state
       setPlayerHand([]);
       setCurrentTrick([]);
@@ -262,6 +427,10 @@ const GamePage: React.FC = () => {
       setHandHistory([]);
       setGameWinner(null);
       setShowRookOverlay(false);
+      setIsDealing(false);
+      setIsFlipping(false);
+      setDealtCardCount(0);
+      setDealAnimationComplete(false);
       if (rookOverlayTimeoutRef.current) {
         clearTimeout(rookOverlayTimeoutRef.current);
         rookOverlayTimeoutRef.current = null;
@@ -288,7 +457,99 @@ const GamePage: React.FC = () => {
     },
     onError: (action, message) => {
       console.error(`${action} error:`, message);
-      alert(message || 'An error occurred');
+      
+      // If it's a card error, clear the pending status for all cards
+      // (we don't know which specific card failed, so clear all to be safe)
+      if (action === 'cardError') {
+        console.log('Clearing all pending card plays due to card error');
+        pendingCardPlaysRef.current.clear();
+      }
+      
+      // Only show alert for non-card errors, or card errors that aren't "already played" type
+      // (duplicate sends will be silently ignored)
+      if (action !== 'cardError' || !message.includes('do not have that card')) {
+        alert(message || 'An error occurred');
+      }
+    },
+    onQuickChat: (seat, message) => {
+      const timestamp = Date.now();
+      setQuickChatMessages((prev) => [...prev, { seat, message, timestamp }]);
+      
+      // Auto-remove message after 2.5 seconds
+      setTimeout(() => {
+        setQuickChatMessages((prev) => prev.filter((msg) => msg.timestamp !== timestamp));
+      }, 2500);
+    },
+    onResync: (message) => {
+      console.log('[Resync] Received full game state:', message);
+      
+      // Update game state with server state
+      setGameState(prev => ({
+        ...prev,
+        status: message.status || prev.status,
+        players: message.players || prev.players,
+        teams: message.teams || prev.teams,
+        dealer: message.dealer !== undefined ? message.dealer : prev.dealer,
+        trump: message.trump || prev.trump,
+        currentPlayer: message.currentPlayer !== undefined ? message.currentPlayer : prev.currentPlayer,
+        bidWinner: message.bidWinner !== undefined ? message.bidWinner : prev.bidWinner,
+        winningBid: message.winningBid !== undefined ? message.winningBid : prev.winningBid,
+        ledSuit: message.ledSuit || prev.ledSuit,
+        teamScores: message.teamScores || prev.teamScores,
+        handHistory: message.handHistory || prev.handHistory,
+      }));
+      
+      // Update player's hand if cards were provided
+      if (message.cards && Array.isArray(message.cards) && message.cards.length > 0) {
+        const parsedCards = message.cards.map(parseCard);
+        setPlayerHand(parsedCards);
+        // Mark animation as complete since this is a resync (skip dealing animation)
+        setDealAnimationComplete(true);
+        hasAnimatedForCurrentHandRef.current = true;
+        console.log(`[Resync] Updated hand with ${parsedCards.length} cards`);
+      }
+      
+      // Update bidding state if in bidding phase
+      if (message.status === 'BIDDING') {
+        setBiddingState({
+          highBid: message.highBid || 0,
+          currentBidder: message.currentBidder !== undefined ? message.currentBidder : null,
+          minBid: 50,
+        });
+      }
+      
+      // Restore current trick if in playing phase
+      if (message.status === 'PLAYING' && message.currentTrick && Array.isArray(message.currentTrick)) {
+        const parsedTrick = message.currentTrick.map((play: { seat: number; card: string }) => ({
+          seat: play.seat,
+          card: parseCard(play.card),
+        }));
+        setCurrentTrick(parsedTrick);
+        console.log(`[Resync] Restored current trick with ${parsedTrick.length} cards`);
+      }
+      
+      // Handle kitty cards for bid winner in TRUMP_SELECTION
+      if (message.kitty && Array.isArray(message.kitty) && message.kitty.length > 0) {
+        const kittyCards = message.kitty.map(parseCard);
+        setPlayerHand(prev => {
+          // Only add kitty if we don't already have 18 cards
+          if (prev.length < 18) {
+            const kittyStrings = new Set<string>(kittyCards.map((c: CardType) => cardToString(c)));
+            setKittyCardStrings(kittyStrings);
+            return [...prev, ...kittyCards];
+          }
+          return prev;
+        });
+        console.log(`[Resync] Added ${kittyCards.length} kitty cards`);
+      }
+      
+      // Update localStorage with new player/team data
+      if (message.players) {
+        localStorage.setItem('rook_players', JSON.stringify(message.players));
+      }
+      if (message.teams) {
+        localStorage.setItem('rook_teams', JSON.stringify(message.teams));
+      }
     },
   });
 
@@ -325,16 +586,27 @@ const GamePage: React.FC = () => {
             </span>
           </div>
         </div>
-        <button
-          className="settings-btn"
-          onClick={() => setShowSettings(true)}
-          aria-label="Settings"
-        >
-          <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round">
-            <circle cx="12" cy="12" r="3" />
-            <path d="M19.4 15a1.65 1.65 0 0 0 .33 1.82l.06.06a2 2 0 0 1 0 2.83 2 2 0 0 1-2.83 0l-.06-.06a1.65 1.65 0 0 0-1.82-.33 1.65 1.65 0 0 0-1 1.51V21a2 2 0 0 1-2 2 2 2 0 0 1-2-2v-.09A1.65 1.65 0 0 0 9 19.4a1.65 1.65 0 0 0-1.82.33l-.06.06a2 2 0 0 1-2.83 0 2 2 0 0 1 0-2.83l.06-.06a1.65 1.65 0 0 0 .33-1.82 1.65 1.65 0 0 0-1.51-1H3a2 2 0 0 1-2-2 2 2 0 0 1 2-2h.09A1.65 1.65 0 0 0 4.6 9a1.65 1.65 0 0 0-.33-1.82l-.06-.06a2 2 0 0 1 0-2.83 2 2 0 0 1 2.83 0l.06.06a1.65 1.65 0 0 0 1.82.33H9a1.65 1.65 0 0 0 1-1.51V3a2 2 0 0 1 2-2 2 2 0 0 1 2 2v.09a1.65 1.65 0 0 0 1 1.51 1.65 1.65 0 0 0 1.82-.33l.06-.06a2 2 0 0 1 2.83 0 2 2 0 0 1 0 2.83l-.06.06a1.65 1.65 0 0 0-.33 1.82V9a1.65 1.65 0 0 0 1.51 1H21a2 2 0 0 1 2 2 2 2 0 0 1-2 2h-.09a1.65 1.65 0 0 0-1.51 1z" />
-          </svg>
-        </button>
+        <div className="header-actions">
+          <button
+            className="quick-chat-btn"
+            onClick={() => setShowQuickChat(true)}
+            aria-label="Quick Chat"
+          >
+            <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round">
+              <path d="M21 15a2 2 0 0 1-2 2H7l-4 4V5a2 2 0 0 1 2-2h14a2 2 0 0 1 2 2z" />
+            </svg>
+          </button>
+          <button
+            className="settings-btn"
+            onClick={() => setShowSettings(true)}
+            aria-label="Settings"
+          >
+            <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round">
+              <circle cx="12" cy="12" r="3" />
+              <path d="M19.4 15a1.65 1.65 0 0 0 .33 1.82l.06.06a2 2 0 0 1 0 2.83 2 2 0 0 1-2.83 0l-.06-.06a1.65 1.65 0 0 0-1.82-.33 1.65 1.65 0 0 0-1 1.51V21a2 2 0 0 1-2 2 2 2 0 0 1-2-2v-.09A1.65 1.65 0 0 0 9 19.4a1.65 1.65 0 0 0-1.82.33l-.06.06a2 2 0 0 1-2.83 0 2 2 0 0 1 0-2.83l.06-.06a1.65 1.65 0 0 0 .33-1.82 1.65 1.65 0 0 0-1.51-1H3a2 2 0 0 1-2-2 2 2 0 0 1 2-2h.09A1.65 1.65 0 0 0 4.6 9a1.65 1.65 0 0 0-.33-1.82l-.06-.06a2 2 0 0 1 0-2.83 2 2 0 0 1 2.83 0l.06.06a1.65 1.65 0 0 0 1.82.33H9a1.65 1.65 0 0 0 1-1.51V3a2 2 0 0 1 2-2 2 2 0 0 1 2 2v.09a1.65 1.65 0 0 0 1 1.51 1.65 1.65 0 0 0 1.82-.33l.06-.06a2 2 0 0 1 2.83 0 2 2 0 0 1 0 2.83l-.06.06a1.65 1.65 0 0 0-.33 1.82V9a1.65 1.65 0 0 0 1.51 1H21a2 2 0 0 1 2 2 2 2 0 0 1-2 2h-.09a1.65 1.65 0 0 0-1.51 1z" />
+            </svg>
+          </button>
+        </div>
       </header>
 
       <main className="game-table">
@@ -344,16 +616,26 @@ const GamePage: React.FC = () => {
             (() => {
               const topSeat = getAbsoluteSeat(2, gameState.seat);
               const topPlayer = gameState.players.find((p) => p.seat === topSeat);
+              const topBidMessage = gameState.status === 'BIDDING' ? bidMessages.get(topSeat) : undefined;
+              const topMessage = gameState.status !== 'BIDDING' ? quickChatMessages.find((msg) => msg.seat === topSeat) : undefined;
               return (
-                <PlayerInfo
-                  name={topPlayer?.name || `Player ${topSeat + 1}`}
-                  position="top"
-                  isPartner={isMyPartner(topSeat, gameState.seat, gameState.teams)}
-                  isCurrentTurn={
-                    (gameState.status === 'BIDDING' && biddingState.currentBidder === topSeat) ||
-                    (gameState.status === 'PLAYING' && gameState.currentPlayer === topSeat)
-                  }
-                />
+                <div className="player-info-wrapper">
+                  {topBidMessage && (
+                    <QuickChatMessage message={topBidMessage} position="bottom" />
+                  )}
+                  {topMessage && !topBidMessage && (
+                    <QuickChatMessage message={topMessage.message} position="bottom" />
+                  )}
+                  <PlayerInfo
+                    name={topPlayer?.name || `Player ${topSeat + 1}`}
+                    position="top"
+                    isPartner={isMyPartner(topSeat, gameState.seat, gameState.teams)}
+                    isCurrentTurn={
+                      (gameState.status === 'BIDDING' && biddingState.currentBidder === topSeat) ||
+                      (gameState.status === 'PLAYING' && gameState.currentPlayer === topSeat)
+                    }
+                  />
+                </div>
               );
             })()}
         </section>
@@ -365,22 +647,40 @@ const GamePage: React.FC = () => {
             (() => {
               const leftSeat = getAbsoluteSeat(1, gameState.seat);
               const leftPlayer = gameState.players.find((p) => p.seat === leftSeat);
+              const leftBidMessage = gameState.status === 'BIDDING' ? bidMessages.get(leftSeat) : undefined;
+              const leftMessage = gameState.status !== 'BIDDING' ? quickChatMessages.find((msg) => msg.seat === leftSeat) : undefined;
               return (
-                <PlayerInfo
-                  name={leftPlayer?.name || `Player ${leftSeat + 1}`}
-                  position="left"
-                  isPartner={isMyPartner(leftSeat, gameState.seat, gameState.teams)}
-                  isCurrentTurn={
-                    (gameState.status === 'BIDDING' && biddingState.currentBidder === leftSeat) ||
-                    (gameState.status === 'PLAYING' && gameState.currentPlayer === leftSeat)
-                  }
-                />
+                <div className="player-info-wrapper player-info-wrapper-left">
+                  {leftBidMessage && (
+                    <QuickChatMessage message={leftBidMessage} position="bottom" />
+                  )}
+                  {leftMessage && !leftBidMessage && (
+                    <QuickChatMessage message={leftMessage.message} position="bottom" />
+                  )}
+                  <PlayerInfo
+                    name={leftPlayer?.name || `Player ${leftSeat + 1}`}
+                    position="left"
+                    isPartner={isMyPartner(leftSeat, gameState.seat, gameState.teams)}
+                    isCurrentTurn={
+                      (gameState.status === 'BIDDING' && biddingState.currentBidder === leftSeat) ||
+                      (gameState.status === 'PLAYING' && gameState.currentPlayer === leftSeat)
+                    }
+                  />
+                </div>
               );
             })()}
 
           <div className="center-area">
-            {/* Bidding UI - shown when game is in BIDDING status */}
-            {gameState.status === 'BIDDING' ? (
+            {/* Deck visual - shown during dealing */}
+            {isDealing && (
+              <Deck 
+                cardCount={sortedHand.length - dealtCardCount} 
+                isVisible={true}
+              />
+            )}
+            
+            {/* Bidding UI - shown when game is in BIDDING status AND deal animation is complete */}
+            {gameState.status === 'BIDDING' && dealAnimationComplete ? (
               <BiddingUI
                 highBid={biddingState.highBid}
                 currentBidder={biddingState.currentBidder}
@@ -459,6 +759,16 @@ const GamePage: React.FC = () => {
                     if (!isCardPlayable(card, sortedHand, gameState.ledSuit, gameState.trump)) return;
                     
                     const cardString = cardToString(card);
+                    
+                    // Prevent duplicate sends - check if this card is already being played
+                    if (pendingCardPlaysRef.current.has(cardString)) {
+                      console.warn('Card already being played, ignoring duplicate:', cardString);
+                      return;
+                    }
+                    
+                    // Mark card as pending
+                    pendingCardPlaysRef.current.add(cardString);
+                    
                     sendMessage({
                       action: 'playCard',
                       card: cardString,
@@ -478,7 +788,9 @@ const GamePage: React.FC = () => {
             ) : (
               <>
                 <TrickArea currentTrick={currentTrick} mySeat={gameState.seat} trump={gameState.trump} />
-                <KittyDisplay cardCount={5} />
+                {gameState.status !== 'BIDDING' && gameState.status !== 'LOBBY' && gameState.status !== 'FULL' && gameState.status !== 'PARTNER_SELECTION' && (
+                  <KittyDisplay cardCount={5} />
+                )}
                 {trickWonNotification && (
                   <TrickWonNotificationComponent notification={trickWonNotification} players={gameState.players} />
                 )}
@@ -491,16 +803,26 @@ const GamePage: React.FC = () => {
             (() => {
               const rightSeat = getAbsoluteSeat(3, gameState.seat);
               const rightPlayer = gameState.players.find((p) => p.seat === rightSeat);
+              const rightBidMessage = gameState.status === 'BIDDING' ? bidMessages.get(rightSeat) : undefined;
+              const rightMessage = gameState.status !== 'BIDDING' ? quickChatMessages.find((msg) => msg.seat === rightSeat) : undefined;
               return (
-                <PlayerInfo
-                  name={rightPlayer?.name || `Player ${rightSeat + 1}`}
-                  position="right"
-                  isPartner={isMyPartner(rightSeat, gameState.seat, gameState.teams)}
-                  isCurrentTurn={
-                    (gameState.status === 'BIDDING' && biddingState.currentBidder === rightSeat) ||
-                    (gameState.status === 'PLAYING' && gameState.currentPlayer === rightSeat)
-                  }
-                />
+                <div className="player-info-wrapper player-info-wrapper-right">
+                  {rightBidMessage && (
+                    <QuickChatMessage message={rightBidMessage} position="bottom" />
+                  )}
+                  {rightMessage && !rightBidMessage && (
+                    <QuickChatMessage message={rightMessage.message} position="bottom" />
+                  )}
+                  <PlayerInfo
+                    name={rightPlayer?.name || `Player ${rightSeat + 1}`}
+                    position="right"
+                    isPartner={isMyPartner(rightSeat, gameState.seat, gameState.teams)}
+                    isCurrentTurn={
+                      (gameState.status === 'BIDDING' && biddingState.currentBidder === rightSeat) ||
+                      (gameState.status === 'PLAYING' && gameState.currentPlayer === rightSeat)
+                    }
+                  />
+                </div>
               );
             })()}
         </section>
@@ -516,17 +838,21 @@ const GamePage: React.FC = () => {
             }`}
           >
             <div className="local-player-header">
-              <div
-                className={`local-player-info ${
-                  (gameState.status === 'BIDDING' && biddingState.currentBidder === gameState.seat) ||
-                  (gameState.status === 'PLAYING' && gameState.currentPlayer === gameState.seat)
-                    ? 'current-turn'
-                    : ''
-                }`}
-              >
-                <div className="local-avatar">You</div>
-                <span className="local-name">{gameState.playerName}</span>
-                <span className="card-count-badge">{sortedHand.length} cards</span>
+              <div className="local-player-info-wrapper">
+                {(() => {
+                  const myBidMessage = gameState.status === 'BIDDING' ? bidMessages.get(gameState.seat) : undefined;
+                  const myMessage = gameState.status !== 'BIDDING' ? quickChatMessages.find((msg) => msg.seat === gameState.seat) : undefined;
+                  return (
+                    <>
+                      {myBidMessage && (
+                        <QuickChatMessage message={myBidMessage} position="top" />
+                      )}
+                      {myMessage && !myBidMessage && (
+                        <QuickChatMessage message={myMessage.message} position="top" />
+                      )}
+                    </>
+                  );
+                })()}
               </div>
             </div>
             <div className="hand-container">
@@ -534,6 +860,16 @@ const GamePage: React.FC = () => {
                 cards={sortedHand}
                 onCardPlay={(card) => {
                   const cardString = cardToString(card);
+                  
+                  // Prevent duplicate sends - check if this card is already being played
+                  if (pendingCardPlaysRef.current.has(cardString)) {
+                    console.warn('Card already being played, ignoring duplicate:', cardString);
+                    return;
+                  }
+                  
+                  // Mark card as pending
+                  pendingCardPlaysRef.current.add(cardString);
+                  
                   sendMessage({
                     action: 'playCard',
                     card: cardString,
@@ -547,6 +883,8 @@ const GamePage: React.FC = () => {
                 }}
                 isCardPlayable={(card) => isCardPlayable(card, sortedHand, gameState.ledSuit, gameState.trump)}
                 isMyTurn={gameState.status === 'PLAYING' && gameState.currentPlayer === gameState.seat}
+                isDealing={isDealing || isFlipping}
+                dealtCardCount={dealtCardCount}
               />
             </div>
           </div>
@@ -619,6 +957,23 @@ const GamePage: React.FC = () => {
         onClose={() => setShowSettings(false)}
         cardSortMethod={cardSortMethod}
         onCardSortMethodChange={handleCardSortMethodChange}
+      />
+      <QuickChatModal
+        isOpen={showQuickChat}
+        onClose={() => setShowQuickChat(false)}
+        onSelectMessage={(message) => {
+          const success = sendMessage({
+            action: 'quickChat',
+            message,
+            seat: gameState.seat,
+          });
+          if (!success) {
+            console.error('Failed to send quick chat message. WebSocket may not be connected.');
+            alert('Failed to send message. Please check your connection.');
+          } else {
+            console.log('Sent quick chat:', message);
+          }
+        }}
       />
     </div>
   );

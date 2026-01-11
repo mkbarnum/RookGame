@@ -2,7 +2,7 @@
 .card-fan-container {
   width: 100%;
   position: relative;
-  touch-action: pan-y;
+  touch-action: pan-x;
   user-select: none;
   -webkit-user-select: none;
   padding: 0;
@@ -19,10 +19,19 @@
   justify-content: center;
   align-items: flex-end;
   position: relative;
-  height: 100px;
+  height: 260px; /* Increased for larger cards */
   width: 100%;
   perspective: 1000px;
   transform-style: preserve-3d;
+  margin-top: -1.5rem; /* Increased negative margin to pull cards up more */
+}
+
+/* Mobile: Increase fan height for larger cards */
+@media (max-width: 767px) {
+  .card-fan {
+    height: 280px; /* Increased for larger cards */
+    margin-top: -1.5rem; /* Increased negative margin to pull cards up more */
+  }
 }
 
 /* ===== Individual Card Slot ===== */
@@ -35,15 +44,47 @@
     translateX(-50%)
     translateX(var(--x-offset, 0px))
     translateY(var(--y-offset, 0px))
-    translateY(var(--lift, 0px))
     rotate(var(--rotation, 0deg))
-    scale(var(--scale, 1));
+    scale(1);
   z-index: var(--z-index, 1);
   transition: 
     transform 0.25s cubic-bezier(0.34, 1.56, 0.64, 1),
     z-index 0.1s ease;
-  cursor: pointer;
+  cursor: default;
   -webkit-tap-highlight-color: transparent;
+}
+
+/* Card just dealt - animates from deck position to final position */
+.card-fan-slot.just-dealt {
+  /* Start position: center of center-area (deck position) */
+  /* We'll use a fixed offset that approximates the center of the play area */
+  animation: dealCard 0.4s cubic-bezier(0.34, 1.56, 0.64, 1) forwards;
+  pointer-events: none; /* Disable interaction during dealing */
+}
+
+@keyframes dealCard {
+  0% {
+    opacity: 0;
+    transform: 
+      translateX(-50%)
+      translateX(0px)
+      translateY(-200px)
+      rotate(0deg)
+      scale(0.9);
+  }
+  30% {
+    opacity: 1;
+  }
+  100% {
+    opacity: 1;
+    transform: 
+      translateX(-50%)
+      translateX(var(--x-offset, 0px))
+      translateY(var(--y-offset, 0px))
+      translateY(var(--lift, 0px))
+      rotate(var(--rotation, 0deg))
+      scale(var(--scale, 1));
+  }
 }
 
 /* When dragging, reduce transition for snappier feel */
@@ -53,21 +94,21 @@
     z-index 0.05s ease;
 }
 
-/* ===== Focused Card State ===== */
-.card-fan-slot.focused {
-  filter: drop-shadow(0 6px 12px rgba(0, 0, 0, 0.4));
-}
-
-.card-fan-slot.focused .card {
-  box-shadow: 
-    0 8px 20px rgba(0, 0, 0, 0.5),
-    0 0 0 2px rgba(255, 200, 87, 0.5),
-    inset 0 1px 0 rgba(255, 255, 255, 0.5);
-}
-
 /* ===== Not Playable State ===== */
 .card-fan-slot.not-playable .card {
   cursor: not-allowed;
+  filter: grayscale(1);
+  opacity: 0.7;
+}
+
+/* ===== Not My Turn State ===== */
+.card-fan-slot.not-my-turn {
+  /* Allow fan scrolling but disable card interactions */
+}
+
+.card-fan-slot.not-my-turn .card {
+  cursor: default;
+  /* No hover/raise effects - handled by removing hover styles */
 }
 
 /* ===== Dragging State ===== */
@@ -88,20 +129,41 @@
   pointer-events: none;
   transform-origin: center center;
   transition: none !important;
+  touch-action: none;
+  -webkit-touch-callout: none;
+  -webkit-user-select: none;
+  user-select: none;
 }
 
 .card-fan-slot[draggable="true"] {
   cursor: grab;
+  /* Critical: Allow custom touch handling for drag on mobile */
+  touch-action: none;
+  -webkit-touch-callout: none;
 }
 
 .card-fan-slot[draggable="true"]:active {
   cursor: grabbing;
 }
 
+/* Only show grab cursor when it's my turn and card is draggable */
+.card-fan-slot.not-my-turn[draggable="true"],
+.card-fan-slot.not-playable[draggable="true"] {
+  cursor: not-allowed;
+}
+
 /* ===== Cards within fan slots ===== */
+/* Mobile: Larger cards for better touch interaction */
+@media (max-width: 767px) {
+  .card-fan-slot .card {
+    width: 88px; /* 68 * 1.3 = 88.4 */
+    height: 122px; /* 94 * 1.3 = 122.2 */
+  }
+}
+
 .card-fan-slot .card {
-  width: 52px;
-  height: 72px;
+  width: 68px; /* 52 * 1.3 = 67.6 */
+  height: 94px; /* 72 * 1.3 = 93.6 */
   transition: 
     box-shadow 0.2s ease,
     transform 0.15s ease;
@@ -112,30 +174,7 @@
   transform: none;
 }
 
-/* ===== Play Hint ===== */
-.play-hint {
-  position: absolute;
-  bottom: -20px;
-  left: 50%;
-  transform: translateX(-50%);
-  font-size: 0.7rem;
-  color: rgba(255, 200, 87, 0.8);
-  text-transform: uppercase;
-  letter-spacing: 0.1em;
-  font-weight: 600;
-  white-space: nowrap;
-  animation: hint-pulse 2s ease-in-out infinite;
-  pointer-events: none;
-}
-
-@keyframes hint-pulse {
-  0%, 100% {
-    opacity: 0.8;
-  }
-  50% {
-    opacity: 0.4;
-  }
-}
+/* Play hint removed - no hover/focus feedback */
 
 /* ===== Empty State ===== */
 .card-fan-empty {
@@ -155,112 +194,90 @@
 /* ===== Responsive: Larger Phones (390px+) ===== */
 @media (min-width: 390px) {
   .card-fan {
-    height: 110px;
+    height: 270px; /* Increased for larger cards */
+    margin-top: -1.5rem; /* Increased negative margin to pull cards up more */
   }
 
-  .card-fan-slot .card {
-    width: 56px;
-    height: 78px;
+  /* Mobile: Keep larger cards */
+  @media (max-width: 767px) {
+    .card-fan {
+      height: 290px; /* Increased for larger cards */
+      margin-top: -1.5rem; /* Increased negative margin to pull cards up more */
+    }
+
+    .card-fan-slot .card {
+      width: 94px; /* 72 * 1.3 = 93.6 */
+      height: 130px; /* 100 * 1.3 = 130 */
+    }
   }
   
-  .play-hint {
-    bottom: -20px;
-    font-size: 0.75rem;
+  /* Desktop: Standard sizes */
+  @media (min-width: 768px) {
+    .card-fan-slot .card {
+      width: 73px; /* 56 * 1.3 = 72.8 */
+      height: 101px; /* 78 * 1.3 = 101.4 */
+    }
   }
 }
 
 /* ===== Responsive: Small Tablets (600px+) ===== */
 @media (min-width: 600px) {
   .card-fan {
-    height: 120px;
+    height: 280px; /* Increased for larger cards */
+    margin-top: -1.5rem; /* Increased negative margin to pull cards up more */
   }
 
   .card-fan-slot .card {
-    width: 62px;
-    height: 86px;
+    width: 81px; /* 62 * 1.3 = 80.6 */
+    height: 112px; /* 86 * 1.3 = 111.8 */
   }
 }
 
 /* ===== Responsive: Tablets (768px+) ===== */
 @media (min-width: 768px) {
   .card-fan {
-    height: 140px;
+    height: 300px; /* Increased for larger cards */
+    margin-top: -1.5rem; /* Increased negative margin to pull cards up more */
   }
 
   .card-fan-slot .card {
-    width: 70px;
-    height: 98px;
-  }
-
-  .card-fan-slot:hover:not(.not-playable) {
-    filter: drop-shadow(0 8px 15px rgba(0, 0, 0, 0.4));
-  }
-
-  .card-fan-slot:hover:not(.not-playable) .card {
-    box-shadow: 
-      0 10px 25px rgba(0, 0, 0, 0.5),
-      0 0 0 2px rgba(255, 200, 87, 0.5),
-      inset 0 1px 0 rgba(255, 255, 255, 0.5);
-  }
-  
-  .play-hint {
-    bottom: -24px;
-    font-size: 0.8rem;
+    width: 91px; /* 70 * 1.3 = 91 */
+    height: 127px; /* 98 * 1.3 = 127.4 */
   }
 }
 
 /* ===== Responsive: Desktop (1024px+) ===== */
 @media (min-width: 1024px) {
   .card-fan {
-    height: 160px;
+    height: 320px; /* Increased for larger cards */
+    margin-top: -1.5rem; /* Increased negative margin to pull cards up more */
   }
 
   .card-fan-slot .card {
-    width: 80px;
-    height: 112px;
+    width: 104px; /* 80 * 1.3 = 104 */
+    height: 146px; /* 112 * 1.3 = 145.6 */
   }
 
   .card-fan-slot {
     transform-origin: center 150%;
-  }
-  
-  .play-hint {
-    bottom: -28px;
-    font-size: 0.85rem;
   }
 }
 
 /* ===== Landscape Mode ===== */
 @media (max-height: 500px) and (orientation: landscape) {
   .card-fan {
-    height: 80px;
+    height: 240px; /* Increased for larger cards */
+    margin-top: -1.5rem; /* Increased negative margin to pull cards up more */
   }
 
   .card-fan-slot .card {
-    width: 44px;
-    height: 62px;
+    width: 57px; /* 44 * 1.3 = 57.2 */
+    height: 81px; /* 62 * 1.3 = 80.6 */
   }
 
   .card-fan-slot {
     transform-origin: center 120%;
   }
-  
-  .play-hint {
-    bottom: -14px;
-    font-size: 0.65rem;
-  }
 }
 
-/* ===== Touch Feedback ===== */
-@media (hover: none) and (pointer: coarse) {
-  .card-fan-slot:active:not(.not-playable) {
-    filter: drop-shadow(0 6px 12px rgba(0, 0, 0, 0.4));
-  }
-  
-  .card-fan-slot:active:not(.not-playable) .card {
-    box-shadow: 
-      0 8px 20px rgba(0, 0, 0, 0.5),
-      0 0 0 2px rgba(255, 200, 87, 0.5),
-      inset 0 1px 0 rgba(255, 255, 255, 0.5);
-  }
-}
+/* Touch feedback removed - cards should not raise on touch */

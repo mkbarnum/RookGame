@@ -6,10 +6,11 @@ export const API_BASE_URL = process.env.REACT_APP_API_BASE_URL || 'http://localh
 // WebSocket base URL - use local WebSocket server in development
 // In production, this will be the AWS API Gateway WebSocket endpoint
 const getWebSocketUrl = () => {
+  // For production (AWS), use the WebSocket URL directly (no /ws path)
   if (process.env.REACT_APP_WS_BASE_URL) {
     return process.env.REACT_APP_WS_BASE_URL;
   }
-  // In development, use the local WebSocket server
+  // In development, use the local WebSocket server with /ws path
   const apiUrl = process.env.REACT_APP_API_BASE_URL || 'http://localhost:3001';
   const wsUrl = apiUrl.replace('http://', 'ws://').replace('https://', 'wss://');
   return `${wsUrl}/ws`;

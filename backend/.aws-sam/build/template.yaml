@@ -1,0 +1,480 @@
+AWSTemplateFormatVersion: '2010-09-09'
+Transform: AWS::Serverless-2016-10-31
+Description: Rook multiplayer card game - Serverless backend
+Globals:
+  Function:
+    Timeout: 30
+    MemorySize: 512
+    Runtime: nodejs18.x
+    Environment:
+      Variables:
+        GAMES_TABLE:
+          Ref: GamesTable
+        HANDS_TABLE:
+          Ref: HandsTable
+        CONNECTIONS_TABLE:
+          Ref: ConnectionsTable
+        WS_API_ENDPOINT:
+          Fn::Sub: https://${WebSocketApi}.execute-api.${AWS::Region}.amazonaws.com/prod
+Resources:
+  GamesTable:
+    Type: AWS::DynamoDB::Table
+    Properties:
+      TableName: RookGames
+      BillingMode: PAY_PER_REQUEST
+      AttributeDefinitions:
+      - AttributeName: gameId
+        AttributeType: S
+      KeySchema:
+      - AttributeName: gameId
+        KeyType: HASH
+      StreamSpecification:
+        StreamViewType: NEW_AND_OLD_IMAGES
+  HandsTable:
+    Type: AWS::DynamoDB::Table
+    Properties:
+      TableName: RookHands
+      BillingMode: PAY_PER_REQUEST
+      AttributeDefinitions:
+      - AttributeName: gameId
+        AttributeType: S
+      - AttributeName: seat
+        AttributeType: N
+      KeySchema:
+      - AttributeName: gameId
+        KeyType: HASH
+      - AttributeName: seat
+        KeyType: RANGE
+  ConnectionsTable:
+    Type: AWS::DynamoDB::Table
+    Properties:
+      TableName: RookConnections
+      BillingMode: PAY_PER_REQUEST
+      AttributeDefinitions:
+      - AttributeName: gameId
+        AttributeType: S
+      - AttributeName: connectionId
+        AttributeType: S
+      KeySchema:
+      - AttributeName: gameId
+        KeyType: HASH
+      - AttributeName: connectionId
+        KeyType: RANGE
+      GlobalSecondaryIndexes:
+      - IndexName: ConnectionIdIndex
+        KeySchema:
+        - AttributeName: connectionId
+          KeyType: HASH
+        Projection:
+          ProjectionType: ALL
+  WebSocketApi:
+    Type: AWS::ApiGatewayV2::Api
+    Properties:
+      Name:
+        Fn::Sub: ${AWS::StackName}-WebSocketApi
+      ProtocolType: WEBSOCKET
+      RouteSelectionExpression: $request.body.action
+  WebSocketApiStage:
+    Type: AWS::ApiGatewayV2::Stage
+    Properties:
+      ApiId:
+        Ref: WebSocketApi
+      StageName: prod
+      AutoDeploy: true
+  CreateGameFunction:
+    Type: AWS::Serverless::Function
+    Properties:
+      Handler: handlers/createGame.handler
+      CodeUri: CreateGameFunction
+      Policies:
+      - DynamoDBCrudPolicy:
+          TableName:
+            Ref: GamesTable
+      Events:
+        CreateGame:
+          Type: HttpApi
+          Properties:
+            Path: /createGame
+            Method: post
+            ApiId:
+              Ref: HttpApi
+    Metadata:
+      SamResourceId: CreateGameFunction
+  JoinGameFunction:
+    Type: AWS::Serverless::Function
+    Properties:
+      Handler: handlers/joinGame.handler
+      CodeUri: JoinGameFunction
+      Policies:
+      - DynamoDBCrudPolicy:
+          TableName:
+            Ref: GamesTable
+      - DynamoDBReadPolicy:
+          TableName:
+            Ref: ConnectionsTable
+      - Statement:
+        - Effect: Allow
+          Action:
+          - execute-api:ManageConnections
+          Resource:
+            Fn::Sub: arn:aws:execute-api:${AWS::Region}:${AWS::AccountId}:${WebSocketApi}/*
+      Events:
+        JoinGame:
+          Type: HttpApi
+          Properties:
+            Path: /joinGame
+            Method: post
+            ApiId:
+              Ref: HttpApi
+    Metadata:
+      SamResourceId: JoinGameFunction
+  ChoosePartnerFunction:
+    Type: AWS::Serverless::Function
+    Properties:
+      Handler: handlers/choosePartner.handler
+      CodeUri: ChoosePartnerFunction
+      Environment:
+        Variables:
+          BOT_ACTION_FUNCTION_NAME:
+            Fn::Sub: ${AWS::StackName}-BotAction
+      Policies:
+      - DynamoDBCrudPolicy:
+          TableName:
+            Ref: GamesTable
+      - DynamoDBCrudPolicy:
+          TableName:
+            Ref: HandsTable
+      - DynamoDBCrudPolicy:
+          TableName:
+            Ref: ConnectionsTable
+      - Statement:
+        - Effect: Allow
+          Action:
+          - execute-api:ManageConnections
+          Resource:
+            Fn::Sub: arn:aws:execute-api:${AWS::Region}:${AWS::AccountId}:${WebSocketApi}/*
+      - Statement:
+        - Effect: Allow
+          Action:
+          - lambda:InvokeFunction
+          Resource:
+            Fn::Sub: arn:aws:lambda:${AWS::Region}:${AWS::AccountId}:function:${AWS::StackName}-BotAction
+      Events:
+        ChoosePartner:
+          Type: HttpApi
+          Properties:
+            Path: /choosePartner
+            Method: post
+            ApiId:
+              Ref: HttpApi
+    Metadata:
+      SamResourceId: ChoosePartnerFunction
+  AddBotFunction:
+    Type: AWS::Serverless::Function
+    Properties:
+      Handler: handlers/addBot.handler
+      CodeUri: AddBotFunction
+      Policies:
+      - DynamoDBCrudPolicy:
+          TableName:
+            Ref: GamesTable
+      - DynamoDBCrudPolicy:
+          TableName:
+            Ref: ConnectionsTable
+      - Statement:
+        - Effect: Allow
+          Action:
+          - execute-api:ManageConnections
+          Resource:
+            Fn::Sub: arn:aws:execute-api:${AWS::Region}:${AWS::AccountId}:${WebSocketApi}/*
+      Events:
+        AddBot:
+          Type: HttpApi
+          Properties:
+            Path: /addBot
+            Method: post
+            ApiId:
+              Ref: HttpApi
+    Metadata:
+      SamResourceId: AddBotFunction
+  StartNextHandFunction:
+    Type: AWS::Serverless::Function
+    Properties:
+      Handler: handlers/startNextHand.handler
+      CodeUri: StartNextHandFunction
+      Environment:
+        Variables:
+          BOT_ACTION_FUNCTION_NAME:
+            Fn::Sub: ${AWS::StackName}-BotAction
+      Policies:
+      - DynamoDBCrudPolicy:
+          TableName:
+            Ref: GamesTable
+      - DynamoDBCrudPolicy:
+          TableName:
+            Ref: HandsTable
+      - DynamoDBCrudPolicy:
+          TableName:
+            Ref: ConnectionsTable
+      - Statement:
+        - Effect: Allow
+          Action:
+          - execute-api:ManageConnections
+          Resource:
+            Fn::Sub: arn:aws:execute-api:${AWS::Region}:${AWS::AccountId}:${WebSocketApi}/*
+      - Statement:
+        - Effect: Allow
+          Action:
+          - lambda:InvokeFunction
+          Resource:
+            Fn::Sub: arn:aws:lambda:${AWS::Region}:${AWS::AccountId}:function:${AWS::StackName}-BotAction
+      Events:
+        StartNextHand:
+          Type: HttpApi
+          Properties:
+            Path: /startNextHand
+            Method: post
+            ApiId:
+              Ref: HttpApi
+    Metadata:
+      SamResourceId: StartNextHandFunction
+  BotActionFunction:
+    Type: AWS::Serverless::Function
+    Properties:
+      FunctionName:
+        Fn::Sub: ${AWS::StackName}-BotAction
+      Handler: handlers/botAction.handler
+      CodeUri: BotActionFunction
+      Timeout: 60
+      Environment:
+        Variables:
+          GAMES_TABLE:
+            Ref: GamesTable
+          HANDS_TABLE:
+            Ref: HandsTable
+          CONNECTIONS_TABLE:
+            Ref: ConnectionsTable
+          WS_API_ENDPOINT:
+            Fn::Sub: https://${WebSocketApi}.execute-api.${AWS::Region}.amazonaws.com/prod
+          BOT_ACTION_FUNCTION_NAME:
+            Fn::Sub: ${AWS::StackName}-BotAction
+      Policies:
+      - DynamoDBCrudPolicy:
+          TableName:
+            Ref: GamesTable
+      - DynamoDBCrudPolicy:
+          TableName:
+            Ref: HandsTable
+      - DynamoDBCrudPolicy:
+          TableName:
+            Ref: ConnectionsTable
+      - Statement:
+        - Effect: Allow
+          Action:
+          - execute-api:ManageConnections
+          Resource:
+            Fn::Sub: arn:aws:execute-api:${AWS::Region}:${AWS::AccountId}:${WebSocketApi}/*
+      - Statement:
+        - Effect: Allow
+          Action:
+          - lambda:InvokeFunction
+          Resource:
+            Fn::Sub: arn:aws:lambda:${AWS::Region}:${AWS::AccountId}:function:${AWS::StackName}-BotAction
+    Metadata:
+      SamResourceId: BotActionFunction
+  ConnectFunction:
+    Type: AWS::Serverless::Function
+    Properties:
+      Handler: handlers/connect.handler
+      CodeUri: ConnectFunction
+      Policies:
+      - DynamoDBCrudPolicy:
+          TableName:
+            Ref: ConnectionsTable
+    Metadata:
+      SamResourceId: ConnectFunction
+  DisconnectFunction:
+    Type: AWS::Serverless::Function
+    Properties:
+      Handler: handlers/disconnect.handler
+      CodeUri: DisconnectFunction
+      Policies:
+      - DynamoDBReadPolicy:
+          TableName:
+            Ref: ConnectionsTable
+      - DynamoDBCrudPolicy:
+          TableName:
+            Ref: ConnectionsTable
+    Metadata:
+      SamResourceId: DisconnectFunction
+  WebSocketRouterFunction:
+    Type: AWS::Serverless::Function
+    Properties:
+      Handler: handlers/websocketRouter.handler
+      CodeUri: WebSocketRouterFunction
+      Environment:
+        Variables:
+          BOT_ACTION_FUNCTION_NAME:
+            Fn::Sub: ${AWS::StackName}-BotAction
+      Policies:
+      - DynamoDBCrudPolicy:
+          TableName:
+            Ref: GamesTable
+      - DynamoDBCrudPolicy:
+          TableName:
+            Ref: HandsTable
+      - DynamoDBCrudPolicy:
+          TableName:
+            Ref: ConnectionsTable
+      - Statement:
+        - Effect: Allow
+          Action:
+          - execute-api:ManageConnections
+          Resource:
+            Fn::Sub: arn:aws:execute-api:${AWS::Region}:${AWS::AccountId}:${WebSocketApi}/*
+      - Statement:
+        - Effect: Allow
+          Action:
+          - lambda:InvokeFunction
+          Resource:
+            Fn::Sub: arn:aws:lambda:${AWS::Region}:${AWS::AccountId}:function:${AWS::StackName}-BotAction
+    Metadata:
+      SamResourceId: WebSocketRouterFunction
+  ConnectRoute:
+    Type: AWS::ApiGatewayV2::Route
+    Properties:
+      ApiId:
+        Ref: WebSocketApi
+      RouteKey: $connect
+      Target:
+        Fn::Sub: integrations/${ConnectIntegration}
+    DependsOn: ConnectIntegration
+  ConnectIntegration:
+    Type: AWS::ApiGatewayV2::Integration
+    Properties:
+      ApiId:
+        Ref: WebSocketApi
+      IntegrationType: AWS_PROXY
+      IntegrationUri:
+        Fn::Sub:
+        - arn:aws:apigateway:${Region}:lambda:path/2015-03-31/functions/${FunctionArn}/invocations
+        - Region:
+            Ref: AWS::Region
+          FunctionArn:
+            Fn::GetAtt:
+            - ConnectFunction
+            - Arn
+    DependsOn: ConnectFunction
+  DisconnectRoute:
+    Type: AWS::ApiGatewayV2::Route
+    Properties:
+      ApiId:
+        Ref: WebSocketApi
+      RouteKey: $disconnect
+      Target:
+        Fn::Sub: integrations/${DisconnectIntegration}
+    DependsOn: DisconnectIntegration
+  DisconnectIntegration:
+    Type: AWS::ApiGatewayV2::Integration
+    Properties:
+      ApiId:
+        Ref: WebSocketApi
+      IntegrationType: AWS_PROXY
+      IntegrationUri:
+        Fn::Sub:
+        - arn:aws:apigateway:${Region}:lambda:path/2015-03-31/functions/${FunctionArn}/invocations
+        - Region:
+            Ref: AWS::Region
+          FunctionArn:
+            Fn::GetAtt:
+            - DisconnectFunction
+            - Arn
+    DependsOn: DisconnectFunction
+  DefaultRoute:
+    Type: AWS::ApiGatewayV2::Route
+    Properties:
+      ApiId:
+        Ref: WebSocketApi
+      RouteKey: $default
+      Target:
+        Fn::Sub: integrations/${DefaultIntegration}
+    DependsOn: DefaultIntegration
+  DefaultIntegration:
+    Type: AWS::ApiGatewayV2::Integration
+    Properties:
+      ApiId:
+        Ref: WebSocketApi
+      IntegrationType: AWS_PROXY
+      IntegrationUri:
+        Fn::Sub:
+        - arn:aws:apigateway:${Region}:lambda:path/2015-03-31/functions/${FunctionArn}/invocations
+        - Region:
+            Ref: AWS::Region
+          FunctionArn:
+            Fn::GetAtt:
+            - WebSocketRouterFunction
+            - Arn
+    DependsOn: WebSocketRouterFunction
+  ConnectFunctionPermission:
+    Type: AWS::Lambda::Permission
+    Properties:
+      FunctionName:
+        Ref: ConnectFunction
+      Action: lambda:InvokeFunction
+      Principal: apigateway.amazonaws.com
+      SourceArn:
+        Fn::Sub: arn:aws:execute-api:${AWS::Region}:${AWS::AccountId}:${WebSocketApi}/*/*
+  DisconnectFunctionPermission:
+    Type: AWS::Lambda::Permission
+    Properties:
+      FunctionName:
+        Ref: DisconnectFunction
+      Action: lambda:InvokeFunction
+      Principal: apigateway.amazonaws.com
+      SourceArn:
+        Fn::Sub: arn:aws:execute-api:${AWS::Region}:${AWS::AccountId}:${WebSocketApi}/*/*
+  WebSocketRouterFunctionPermission:
+    Type: AWS::Lambda::Permission
+    Properties:
+      FunctionName:
+        Ref: WebSocketRouterFunction
+      Action: lambda:InvokeFunction
+      Principal: apigateway.amazonaws.com
+      SourceArn:
+        Fn::Sub: arn:aws:execute-api:${AWS::Region}:${AWS::AccountId}:${WebSocketApi}/*/*
+  HttpApi:
+    Type: AWS::Serverless::HttpApi
+    Properties:
+      CorsConfiguration:
+        AllowOrigins:
+        - '*'
+        AllowMethods:
+        - GET
+        - POST
+        - OPTIONS
+        AllowHeaders:
+        - Content-Type
+        - Authorization
+        MaxAge: 300
+Outputs:
+  HttpApiUrl:
+    Description: HTTP API Gateway endpoint URL
+    Value:
+      Fn::Sub: https://${HttpApi}.execute-api.${AWS::Region}.amazonaws.com
+    Export:
+      Name:
+        Fn::Sub: ${AWS::StackName}-HttpApiUrl
+  WebSocketApiUrl:
+    Description: WebSocket API Gateway endpoint URL
+    Value:
+      Fn::Sub: wss://${WebSocketApi}.execute-api.${AWS::Region}.amazonaws.com/prod
+    Export:
+      Name:
+        Fn::Sub: ${AWS::StackName}-WebSocketApiUrl
+  WebSocketApiId:
+    Description: WebSocket API Gateway ID
+    Value:
+      Ref: WebSocketApi
+    Export:
+      Name:
+        Fn::Sub: ${AWS::StackName}-WebSocketApiId

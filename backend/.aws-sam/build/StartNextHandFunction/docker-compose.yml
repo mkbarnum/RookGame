@@ -1,0 +1,8 @@
+services:
+  dynamodb-local:
+    image: amazon/dynamodb-local:latest
+    container_name: rook-dynamodb
+    ports:
+      - "8000:8000"
+    command: "-jar DynamoDBLocal.jar -sharedDb -inMemory"
+    restart: unless-stopped

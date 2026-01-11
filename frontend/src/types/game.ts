@@ -3,6 +3,7 @@
 export interface Player {
   seat: number;
   name: string;
+  isBot?: boolean;
 }
 
 export interface Card {
